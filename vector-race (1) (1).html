@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>向量賽車對戰</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#1a2233; --accent:#4fd1c5; --p1:#ff5964; --p2:#3aa6ff;
+    --text:#eef2f8; --muted:#8a93a6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:"Microsoft JhengHei","PingFang TC",sans-serif;}
+  #homeScreen{
+    height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+    overflow-y:auto; padding:20px 12px;
+  }
+  #homeScreen h1{font-size:2.2em; letter-spacing:2px; margin:0;}
+  #homeScreen p.sub{color:var(--muted); margin-top:-14px; text-align:center; max-width:480px;}
+  .bigBtn{
+    padding:18px 40px; font-size:1.1em; border:none; border-radius:12px; cursor:pointer;
+    background:var(--panel); color:var(--text); border:2px solid transparent; transition:all .15s;
+    min-width:220px;
+  }
+  .bigBtn:hover{border-color:var(--accent); transform:translateY(-2px);}
+  #diffBox{display:none; flex-direction:column; gap:12px; align-items:center; margin-top:6px;}
+  #diffBox.show{display:flex;}
+  .diffRow{display:flex; gap:10px;}
+  .diffBtn{padding:10px 24px;border-radius:8px;border:2px solid var(--muted);background:transparent;color:var(--text);cursor:pointer;}
+  .diffBtn.sel{border-color:var(--accent); color:var(--accent);}
+  #gameScreen{display:none; height:100%; flex-direction:column;}
+  #topbar{
+    display:flex; align-items:center; gap:16px; padding:10px 16px; background:var(--panel);
+    flex-wrap:wrap;
+  }
+  #topbar .turnBadge{padding:6px 14px;border-radius:20px;font-weight:bold;}
+  #canvasWrap{flex:1; position:relative; overflow:hidden; cursor:grab; touch-action:none;}
+  #canvasWrap.dragging{cursor:grabbing;}
+  canvas{display:block; background:#0c1119; touch-action:none;}
+  .ctrlBtn{background:#26314a;border:1px solid #3a4864;color:var(--text);padding:6px 12px;border-radius:6px;cursor:pointer;}
+  .ctrlBtn:hover{background:#324063;}
+  #overlay{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.6);
+  }
+  #overlay.show{display:flex;}
+  #overlayBox{background:var(--panel); padding:30px 40px; border-radius:14px; text-align:center; max-width:90vw;}
+  #overlayBox h2{margin-top:0;}
+  .spacer{flex:1;}
+  #legend{display:flex; gap:14px; font-size:.9em; color:var(--muted);}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;}
+  #hint{font-size:.8em;color:var(--muted);}
+
+  /* ---- 手機／小螢幕適應 ---- */
+  @media (max-width:700px){
+    #homeScreen{padding:16px; gap:14px; overflow-y:auto; justify-content:flex-start; padding-top:32px;}
+    #homeScreen h1{font-size:1.5em;}
+    .bigBtn{padding:16px 22px; min-width:0; width:100%; max-width:320px; font-size:1em;}
+    .diffRow{flex-wrap:wrap; justify-content:center;}
+    .diffBtn{padding:10px 16px; font-size:.9em;}
+    #topbar{gap:8px; padding:8px 10px;}
+    #topbar .turnBadge{padding:5px 10px; font-size:.9em;}
+    #hint{display:none;}
+    #legend{font-size:.8em; gap:8px;}
+    .ctrlBtn{padding:8px 10px; font-size:.85em;}
+    #overlayBox{padding:22px 20px;}
+  }
+  @media (hover:none) and (pointer:coarse){
+    .bigBtn, .diffBtn, .ctrlBtn{min-height:44px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="homeScreen">
+  <h1>🏎️ 向量賽車對戰</h1>
+  <p class="sub">網格賽道，兩人輪流延伸自己的速度向量前進，先抵達終點者獲勝；落點衝出賽道即判定撞牆落敗。</p>
+
+  <div id="settingsBox" style="display:flex;flex-direction:column;gap:14px;align-items:center;">
+    <div>
+      <div style="color:var(--muted);margin-bottom:6px;text-align:center;">賽道長度</div>
+      <div class="diffRow" id="lengthRow" style="flex-wrap:wrap;justify-content:center;">
+        <button class="diffBtn sel" data-len="1">標準</button>
+        <button class="diffBtn" data-len="2">更長</button>
+        <button class="diffBtn" data-len="3">x1.5</button>
+        <button class="diffBtn" data-len="4">x2</button>
+        <button class="diffBtn" data-len="5">x3</button>
+        <button class="diffBtn" data-len="6">x4</button>
+        <button class="diffBtn" data-len="7">x5</button>
+        <button class="diffBtn" data-len="9">x8</button>
+      </div>
+    </div>
+    <div>
+      <div style="color:var(--muted);margin-bottom:6px;text-align:center;">賽道大小</div>
+      <div class="diffRow" id="sizeRow">
+        <button class="diffBtn sel" data-size="100">100×100</button>
+        <button class="diffBtn" data-size="150">150×150</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="bigBtn" id="btnPvp">👥 多人對戰</button>
+  <button class="bigBtn" id="btnAi">🤖 人機對戰</button>
+  <div id="diffBox">
+    <div style="color:var(--muted)">選擇 AI 難度</div>
+    <div class="diffRow">
+      <button class="diffBtn" data-d="easy">簡單</button>
+      <button class="diffBtn sel" data-d="medium">中等</button>
+      <button class="diffBtn" data-d="hard">困難</button>
+    </div>
+    <button class="bigBtn" id="btnStartAi" style="margin-top:6px;">開始遊戲</button>
+  </div>
+</div>
+
+<div id="gameScreen">
+  <div id="topbar">
+    <div class="turnBadge" id="turnBadge">玩家1回合</div>
+    <div id="legend">
+      <span><span class="dot" style="background:var(--p1)"></span>玩家1</span>
+      <span><span class="dot" style="background:var(--p2)"></span><span id="p2label">玩家2</span></span>
+    </div>
+    <div id="hint">滑鼠：滾輪縮放・拖曳移動・點擊落子　|　觸控：單指拖曳移動・雙指縮放・輕觸落子</div>
+    <div class="spacer"></div>
+    <button class="ctrlBtn" id="btnZoomOut">－</button>
+    <button class="ctrlBtn" id="btnZoomIn">＋</button>
+    <button class="ctrlBtn" id="btnReset">重置視角</button>
+    <button class="ctrlBtn" id="btnHome">返回主頁</button>
+  </div>
+  <div id="canvasWrap">
+    <canvas id="cv"></canvas>
+    <div id="overlay">
+      <div id="overlayBox">
+        <h2 id="overlayTitle"></h2>
+        <p id="overlayMsg"></p>
+        <button class="bigBtn" id="btnAgain">再來一局（新賽道）</button>
+        <button class="bigBtn" id="btnBackHome">返回主頁</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ---------- 基本狀態 ----------
+let GRID = 100;
+let lengthBands = 1; // 賽道分段數（決定蜿蜒次數／長度）
+let mode = 'pvp'; // 'pvp' | 'ai'
+let aiDifficulty = 'medium';
+
+const DIFF = {
+  easy:   {random:0.55, depth:1, beam:2},
+  medium: {random:0.20, depth:4, beam:3},
+  hard:   {random:0.0,  depth:7, beam:3}
+};
+
+let track = null;
+let players = [];
+let turn = 0;
+let candidates = [];
+let projected = null;
+let gameOver = false;
+let animating = false;
+
+let scale = 6, offsetX = 40, offsetY = 40;
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const wrap = document.getElementById('canvasWrap');
+
+function resizeCanvas(){
+  cv.width = wrap.clientWidth;
+  cv.height = wrap.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// ---------- 座標轉換 ----------
+function toPx(gx,gy){ return {x: offsetX+gx*scale, y: offsetY+gy*scale}; }
+function toGrid(px,py){ return {x:(px-offsetX)/scale, y:(py-offsetY)/scale}; }
+
+function fitView(){
+  const pad = 40;
+  const availW = wrap.clientWidth - pad*2;
+  const availH = wrap.clientHeight - pad*2;
+  scale = Math.max(1.5, Math.min(availW, availH) / GRID);
+  offsetX = (wrap.clientWidth - GRID*scale)/2;
+  offsetY = (wrap.clientHeight - GRID*scale)/2;
+}
+
+// ---------- 幾何工具 ----------
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function addV(a,b){ return {x:a.x+b.x, y:a.y+b.y}; }
+function clampNum(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+
+function catmullRom(p0,p1,p2,p3,t){
+  const t2=t*t, t3=t2*t;
+  const x = 0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3);
+  const y = 0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3);
+  return {x,y};
+}
+
+function pointInPolygon(pt, poly){
+  let inside = false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+    const intersect = ((yi>pt.y)!==(yj>pt.y)) &&
+      (pt.x < (xj-xi)*(pt.y-yi)/(yj-yi)+xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// ---------- 賽道生成 ----------
+
+// 以三點估算中心線的局部曲率半徑（Menger curvature），用來限制賽道半寬，
+// 避免內彎角的半寬大於彎道半徑而令左右邊界互相穿過/重疊
+function curvatureRadius(p0,p1,p2){
+  const a = dist(p1,p2), b = dist(p0,p2), c = dist(p0,p1);
+  if(a<1e-6||b<1e-6||c<1e-6) return Infinity;
+  const area = Math.abs((p1.x-p0.x)*(p2.y-p0.y)-(p2.x-p0.x)*(p1.y-p0.y))/2;
+  if(area<1e-6) return Infinity;
+  const k = 4*area/(a*b*c);
+  if(k<1e-9) return Infinity;
+  return 1/k;
+}
+
+function segIntersect(p1,p2,p3,p4){
+  function ccw(a,b,c){ return (c.y-a.y)*(b.x-a.x) - (b.y-a.y)*(c.x-a.x); }
+  const d1=ccw(p3,p4,p1), d2=ccw(p3,p4,p2), d3=ccw(p1,p2,p3), d4=ccw(p1,p2,p4);
+  return (((d1>0&&d2<0)||(d1<0&&d2>0)) && ((d3>0&&d4<0)||(d3<0&&d4>0)));
+}
+
+// 檢查一條折線（如賽道左/右邊界）是否自我相交
+function polylineSelfIntersects(pts){
+  const n = pts.length;
+  for(let i=0;i<n-1;i++){
+    for(let j=i+2;j<n-1;j++){
+      if(i===0 && j===n-2) continue;
+      if(segIntersect(pts[i],pts[i+1],pts[j],pts[j+1])) return true;
+    }
+  }
+  return false;
+}
+
+// 中心線上某點與「非鄰近路段」之間的最短距離，用來偵測賽道是否繞回自己附近
+function minSelfDistance(center, i, gap){
+  let best = Infinity;
+  for(let j=0;j<center.length;j++){
+    if(Math.abs(i-j) < gap) continue;
+    const d = dist(center[i], center[j]);
+    if(d<best) best=d;
+  }
+  return best;
+}
+
+function generateTrack(attempt){
+  attempt = attempt || 0;
+
+  // 賽道以「隨機漫步」方式逐段生成：每一步隨機選擇「直路」或「彎道」，
+  // 彎道的半徑（急彎/闊彎）、角度（小拐/大拐）、方向（左/右）都隨機，
+  // 每加一段就檢查新的取樣點是否同時「留在場地內」並且「離開自己其餘路段夠遠」，
+  // 唔夠安全就換一組隨機參數再試，確保生出嚟嘅複雜曲線一定唔會自我重疊。
+  const HALF_WIDTH = 5.5; // 賽道固定半寬（全程闊度 = 11）
+  const wallBuf = 2;
+  const marginSafe = HALF_WIDTH + wallBuf; // 中心線與場地邊緣的最小距離
+  const selfBuf = HALF_WIDTH*2 + 2.6; // 中心線與「非鄰近路段」的最小距離
+  const neighborSkip = 16; // 檢查自我碰撞時跳過最近的取樣點數（避免鄰接點誤判為碰撞）
+
+  const LENGTH_MULT = {1:1, 2:1.3, 3:1.6, 4:2.2, 5:3.2, 6:4.2, 7:5.2, 9:7.5};
+  const mult = LENGTH_MULT[lengthBands] || 1;
+  const targetLen = GRID*1.9*mult;
+
+  function withinBounds(pts){
+    for(const p of pts){
+      if(p.x<marginSafe||p.x>GRID-marginSafe||p.y<marginSafe||p.y>GRID-marginSafe) return false;
+    }
+    return true;
+  }
+  function farEnoughFromExisting(pts, center){
+    const lim = center.length-neighborSkip;
+    for(const p of pts){
+      for(let j=0;j<lim;j+=2){ // 隔點取樣比對，加快檢查速度，取樣夠密仍可靠
+        if(dist(p, center[j]) < selfBuf) return false;
+      }
+    }
+    return true;
+  }
+
+  let heading = (Math.random()*0.7-0.35);
+  let pos = {x: marginSafe+2+Math.random()*3, y: GRID/2 + (Math.random()*2-1)*GRID*0.18};
+  const center = [{x:pos.x, y:pos.y}];
+  let curLen = 0;
+  let guardIter = 0;
+  const maxIter = 6000;
+
+  while(curLen < targetLen && guardIter < maxIter){
+    guardIter++;
+    let placed = false;
+    for(let tries=0; tries<24 && !placed; tries++){
+      const isTurn = Math.random() < 0.62; // 偏向多啲彎，令賽道更複雜
+      let candidatePts, newPos, newHeading;
+      if(!isTurn){
+        const len = 6 + Math.random()*15; // 直路長度隨機 6~21
+        const n = Math.max(2, Math.round(len/2));
+        const pts = [];
+        for(let s=1;s<=n;s++){
+          const t=s/n;
+          pts.push({x:pos.x+Math.cos(heading)*len*t, y:pos.y+Math.sin(heading)*len*t});
+        }
+        candidatePts = pts; newPos = pts[pts.length-1]; newHeading = heading;
+      } else {
+        // 彎道：半徑同角度隨機混合「急彎」與「闊彎」，方向亦隨機，
+        // 但會有機會偏向轉去場地中心（wall-avoidance），避免經常撞邊界
+        const sharp = Math.random() < 0.4;
+        const radius = sharp ? (HALF_WIDTH+3.5+Math.random()*7) : (HALF_WIDTH+9+Math.random()*24);
+        const angleDeg = sharp ? (45+Math.random()*100) : (20+Math.random()*75);
+        let sign = Math.random()<0.5 ? 1 : -1;
+        const cx = GRID/2, cy = GRID/2;
+        const toCenter = Math.atan2(cy-pos.y, cx-pos.x);
+        let diff = ((toCenter-heading+Math.PI*3)%(Math.PI*2))-Math.PI;
+        if(Math.abs(diff) > 0.35 && Math.random()<0.6){ sign = diff>0?1:-1; }
+        const angle = angleDeg*Math.PI/180*sign;
+        const n = Math.max(4, Math.round(Math.abs(angleDeg)/6));
+        const turnCenterAngle = heading + Math.PI/2*sign;
+        const turnCenter = {x:pos.x+Math.cos(turnCenterAngle)*radius, y:pos.y+Math.sin(turnCenterAngle)*radius};
+        const startAngle = Math.atan2(pos.y-turnCenter.y, pos.x-turnCenter.x);
+        const pts = [];
+        for(let s=1;s<=n;s++){
+          const a = startAngle + angle*(s/n);
+          pts.push({x:turnCenter.x+Math.cos(a)*radius, y:turnCenter.y+Math.sin(a)*radius});
+        }
+        candidatePts = pts; newPos = pts[pts.length-1]; newHeading = heading+angle;
+      }
+      if(withinBounds(candidatePts) && farEnoughFromExisting(candidatePts, center)){
+        let segLen = dist(pos, candidatePts[0]);
+        for(let k=1;k<candidatePts.length;k++) segLen += dist(candidatePts[k-1],candidatePts[k]);
+        candidatePts.forEach(p=>center.push(p));
+        curLen += segLen;
+        pos = newPos; heading = newHeading;
+        placed = true;
+      }
+    }
+    // 第二輪：若周圍太擠，改用較短、較急嘅「脫困」彎道再試多次，盡量用盡剩餘空間
+    for(let tries=0; tries<30 && !placed; tries++){
+      const radius = HALF_WIDTH+3.2+Math.random()*4.5;
+      const angleDeg = 25+Math.random()*90;
+      const sign = Math.random()<0.5 ? 1 : -1;
+      const angle = angleDeg*Math.PI/180*sign;
+      const n = Math.max(3, Math.round(angleDeg/7));
+      const turnCenterAngle = heading + Math.PI/2*sign;
+      const turnCenter = {x:pos.x+Math.cos(turnCenterAngle)*radius, y:pos.y+Math.sin(turnCenterAngle)*radius};
+      const startAngle = Math.atan2(pos.y-turnCenter.y, pos.x-turnCenter.x);
+      const pts = [];
+      for(let s=1;s<=n;s++){
+        const a = startAngle + angle*(s/n);
+        pts.push({x:turnCenter.x+Math.cos(a)*radius, y:turnCenter.y+Math.sin(a)*radius});
+      }
+      if(withinBounds(pts) && farEnoughFromExisting(pts, center)){
+        let segLen = dist(pos, pts[0]);
+        for(let k=1;k<pts.length;k++) segLen += dist(pts[k-1],pts[k]);
+        pts.forEach(p=>center.push(p));
+        curLen += segLen;
+        pos = pts[pts.length-1]; heading += angle;
+        placed = true;
+      }
+    }
+    if(!placed) break; // 兩輪都揾唔到安全嘅下一步，賽道就此完結（已行嘅部分依然有效）
+  }
+
+  // 若行程太短（例如場地太細、一開始就被困住），重新整局再試
+  if(curLen < targetLen*0.35 && attempt < 25){
+    return generateTrack(attempt+1);
+  }
+
+  // 中心線累積弧長，供 AI 判斷「沿賽道的進度」使用
+  const arcLen = [0];
+  for(let i=1;i<center.length;i++){
+    arcLen.push(arcLen[i-1] + dist(center[i-1], center[i]));
+  }
+
+  // 每個中心線點附近嘅彎道曲率半徑（半徑越細代表彎越急），
+  // 俾 AI 評估「依家咁快嘅速度，前面彎道頂唔頂得順」
+  const curvature = center.map((p,i)=>{
+    const i0 = Math.max(0,i-3), i2 = Math.min(center.length-1,i+3);
+    return curvatureRadius(center[i0], center[i], center[i2]);
+  });
+
+  // 半寬：因為每一段（直路／圓弧）加入時都已檢查過「離自己其餘路段夠遠」，
+  // 全程使用固定闊度即可
+  const halfWidths = center.map(()=> HALF_WIDTH);
+
+  const left=[], right=[];
+  for(let i=0;i<center.length;i++){
+    const p0 = center[Math.max(0,i-1)];
+    const p1 = center[Math.min(center.length-1,i+1)];
+    let tx = p1.x-p0.x, ty = p1.y-p0.y;
+    const len = Math.hypot(tx,ty)||1;
+    tx/=len; ty/=len;
+    const nx = -ty, ny = tx;
+    const hw = halfWidths[i];
+    left.push({x:clampNum(center[i].x+nx*hw,0,GRID), y:clampNum(center[i].y+ny*hw,0,GRID)});
+    right.push({x:clampNum(center[i].x-nx*hw,0,GRID), y:clampNum(center[i].y-ny*hw,0,GRID)});
+  }
+
+  // 保險機制：萬一仍出現自我相交（極罕見），重新產生賽道
+  if((polylineSelfIntersects(left) || polylineSelfIntersects(right)) && attempt < 25){
+    return generateTrack(attempt+1);
+  }
+
+  const polygon = left.concat(right.slice().reverse());
+
+  const s0 = center[0];
+  const sN0 = {x:left[0].x-right[0].x, y:left[0].y-right[0].y};
+  const sLen = Math.hypot(sN0.x,sN0.y)||1;
+  const sNorm = {x:sN0.x/sLen, y:sN0.y/sLen};
+
+  // 起點方向的切線（沿賽道前進方向），用嚟將起步點推入賽道內側，
+  // 避免起步點剛好落喺起點閘門（polygon 邊界線）上
+  const tEnd = center[Math.min(center.length-1,1)];
+  let ttx = tEnd.x-s0.x, tty = tEnd.y-s0.y;
+  const tLen = Math.hypot(ttx,tty)||1;
+  ttx/=tLen; tty/=tLen;
+  const FORWARD = 3;
+
+  const p1Start = {x:Math.round(s0.x - sNorm.x*2 + ttx*FORWARD), y:Math.round(s0.y - sNorm.y*2 + tty*FORWARD)};
+  const p2Start = {x:Math.round(s0.x + sNorm.x*2 + ttx*FORWARD), y:Math.round(s0.y + sNorm.y*2 + tty*FORWARD)};
+
+  const last = center.length-1;
+  const finishCenter = center[last];
+  const finishRadius = halfWidths[last]*0.9;
+
+  return {
+    center, left, right, polygon, halfWidths, arcLen, curvature,
+    startGate:[left[0],right[0]],
+    finishGate:[left[last],right[last]],
+    p1Start, p2Start, finishCenter, finishRadius
+  };
+}
+
+function isOnTrack(pt){
+  if(pt.x<0||pt.x>GRID||pt.y<0||pt.y>GRID) return false;
+  return pointInPolygon(pt, track.polygon);
+}
+function isFinish(pt){
+  return dist(pt, track.finishCenter) <= track.finishRadius;
+}
+// 檢查從 a 到 b 嘅整條直線移動路徑：沿途逐點檢查，
+// 一踩入終點區就即刻算抵達終點（回傳落喺終點嗰個座標）；
+// 但如果喺踩入終點之前，路徑已經有一點離開咗賽道（例如切過賽道外嘅缺口/空隙），
+// 就算之後嗰段幾接近終點都好，一樣視為撞牆出界，唔會俾佢「穿過缺口直達終點」
+function traceMove(a,b){
+  const d = dist(a,b);
+  const steps = Math.max(12, Math.ceil(d*4));
+  for(let i=1;i<=steps;i++){
+    const t = i/steps;
+    const p = {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t};
+    if(isFinish(p)) return {onTrack:true, finishPoint:p};
+    if(!isOnTrack(p)) return {onTrack:false, finishPoint:null};
+  }
+  return {onTrack:true, finishPoint:null};
+}
+// 保留舊介面（供候選點顯示等地方使用）：路徑是否全程有效（留喺賽道內或抵達終點）
+function pathStaysOnTrack(a,b){
+  return traceMove(a,b).onTrack;
+}
+
+// ---------- 玩家 / 移動邏輯 ----------
+function initGame(){
+  track = generateTrack();
+  const c1 = getComputedStyle(document.documentElement).getPropertyValue('--p1').trim();
+  const c2 = getComputedStyle(document.documentElement).getPropertyValue('--p2').trim();
+  players = [
+    {id:0, color:c1, path:[track.p1Start], crashed:false, finished:false, isAI:false},
+    {id:1, color:c2, path:[track.p2Start], crashed:false, finished:false, isAI: mode==='ai'}
+  ];
+  turn = 0;
+  gameOver = false;
+  animating = false;
+  document.getElementById('p2label').textContent = mode==='ai'
+    ? `AI (${{'easy':'簡單','medium':'中等','hard':'困難'}[aiDifficulty]})` : '玩家2';
+  fitView();
+  beginTurn();
+}
+
+function lastPos(p){ return p.path[p.path.length-1]; }
+function velocity(p){
+  if(p.path.length<2) return {x:0,y:0};
+  const a=p.path[p.path.length-2], b=p.path[p.path.length-1];
+  return {x:b.x-a.x, y:b.y-a.y};
+}
+
+function getCandidates(player, opponent){
+  const proj = addV(lastPos(player), velocity(player));
+  const opp = lastPos(opponent);
+  const opts = [];
+  for(let dx=-1;dx<=1;dx++){
+    for(let dy=-1;dy<=1;dy++){
+      if(dx===0&&dy===0) continue;
+      const p = {x:proj.x+dx, y:proj.y+dy};
+      if(p.x<0||p.x>GRID||p.y<0||p.y>GRID) continue;
+      if(p.x===opp.x && p.y===opp.y) continue;
+      opts.push(p);
+    }
+  }
+  return {proj, opts};
+}
+
+function beginTurn(){
+  if(gameOver) return;
+  const player = players[turn];
+  const opponent = players[1-turn];
+  const {proj, opts} = getCandidates(player, opponent);
+  projected = proj;
+  candidates = opts;
+  updateTurnBadge();
+  draw();
+  if(player.isAI){
+    animating = true;
+    setTimeout(()=>{
+      const choice = aiChoose(player, proj, opts);
+      animating = false;
+      confirmMove(choice);
+    }, 550);
+  }
+}
+
+function updateTurnBadge(){
+  const player = players[turn];
+  const badge = document.getElementById('turnBadge');
+  const name = turn===0 ? '玩家1' : (mode==='ai' ? 'AI' : '玩家2');
+  badge.textContent = name + ' 回合' + (player.isAI ? '（思考中...）' : '');
+  badge.style.background = player.color;
+  badge.style.color = '#0c1119';
+}
+
+function confirmMove(pt){
+  if(gameOver || !pt) return;
+  const player = players[turn];
+  const prev = lastPos(player);
+
+  // 沿路徑逐點檢查：一離開賽道就算撞牆；喺未離開賽道之前踩入終點區就算抵達終點
+  // （即使落點本身已經飛出終點範圍甚至飛出賽道，只要之前一路都留喺賽道上就仍然有效，
+  // 但如果係切過賽道外嘅缺口先飛入終點附近，就唔算數，一樣視為撞牆出界）
+  const trace = traceMove(prev, pt);
+
+  if(trace.finishPoint){
+    player.path.push(trace.finishPoint);
+    candidates = [];
+    projected = null;
+    player.finished = true;
+    endGame(player, 'finish');
+    return;
+  }
+
+  player.path.push(pt);
+  candidates = [];
+  projected = null;
+
+  if(!trace.onTrack || !isOnTrack(pt)){
+    player.crashed = true;
+    endGame(players[1-turn], 'crash', player);
+    return;
+  }
+  turn = 1-turn;
+  draw();
+  beginTurn();
+}
+
+function endGame(winner, reason, loser){
+  gameOver = true;
+  draw();
+  const overlay = document.getElementById('overlay');
+  const title = document.getElementById('overlayTitle');
+  const msg = document.getElementById('overlayMsg');
+  const wname = winner.id===0 ? '玩家1' : (mode==='ai' ? 'AI' : '玩家2');
+  if(reason==='finish'){
+    title.textContent = '🏁 抵達終點！';
+    msg.textContent = `${wname} 獲勝！`;
+  } else {
+    const lname = loser.id===0 ? '玩家1' : (mode==='ai' ? 'AI' : '玩家2');
+    title.textContent = '💥 撞牆了！';
+    msg.textContent = `${lname} 出界，${wname} 獲勝！`;
+  }
+  overlay.classList.add('show');
+}
+
+// ---------- AI ----------
+function countOnTrackNeighbors(pt, vel){
+  const proj = addV(pt, vel);
+  let c=0;
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+    if(dx===0&&dy===0) continue;
+    const p={x:proj.x+dx,y:proj.y+dy};
+    if(p.x>=0&&p.x<=GRID&&p.y>=0&&p.y<=GRID&&isOnTrack(p)) c++;
+  }
+  return c;
+}
+
+// 找出離某點最近的中心線取樣點，回傳其沿賽道的累積弧長（進度）、橫向偏移距離、及索引。
+// hintIdx 用嚟將搜尋範圍縮小到附近一段（因為新落點通常離上一步唔會太遠），
+// 令 AI 向前搜尋好幾步都唔使每次掃描成條（可能好長嘅）賽道中心線
+function trackProgress(pt, hintIdx){
+  const c = track.center;
+  let lo=0, hi=c.length-1;
+  if(hintIdx!=null){
+    lo = Math.max(0, hintIdx-150);
+    hi = Math.min(c.length-1, hintIdx+150);
+  }
+  let bestI=lo, bestD=Infinity;
+  for(let i=lo;i<=hi;i++){
+    const d = dist(pt, c[i]);
+    if(d<bestD){ bestD=d; bestI=i; }
+  }
+  return {progress: track.arcLen[bestI], lateral: bestD, idx: bestI};
+}
+
+// 睇下由目前進度開始、往前一段「煞車距離」內，賽道最急彎道嘅曲率半徑係幾多；
+// 速度越快，需要睇得越遠，令 AI 識得提早喺入彎前減速，而唔係一味加速
+const OVERSPEED_K = 1.35; // 安全速度 ≈ sqrt(彎道半徑) * OVERSPEED_K，數值越細代表 AI 越保守
+function upcomingMinRadius(idx, progress, speed){
+  if(speed < 0.75) return Infinity;
+  const lookDist = Math.max(6, speed*3.2);
+  let minR = Infinity;
+  for(let i=idx;i<track.center.length;i++){
+    if(track.arcLen[i]-progress > lookDist) break;
+    if(track.curvature[i] < minR) minR = track.curvature[i];
+  }
+  return minR;
+}
+
+// 單一候選點嘅即時評分（唔含向前搜尋），包含：沿賽道進度、橫向偏移、
+// 以及「入彎超速」懲罰——依家速度是否超出前方彎道嘅安全速度。
+// 回傳 {score, idx}，idx 供下一層遞迴作為搜尋提示，避免重複全賽道掃描
+function baseScore(pt, prevPt, hintIdx){
+  if(pt.x<0||pt.x>GRID||pt.y<0||pt.y>GRID) return {score:-9999, idx:hintIdx||0};
+  if(isFinish(pt)) return {score: 1e7 - dist(pt, track.finishCenter), idx:hintIdx||0};
+  if(!isOnTrack(pt) || !pathStaysOnTrack(prevPt, pt)) return {score:-5000, idx:hintIdx||0};
+  const vel = {x:pt.x-prevPt.x, y:pt.y-prevPt.y};
+  const speed = Math.hypot(vel.x, vel.y);
+  const {progress, lateral, idx} = trackProgress(pt, hintIdx);
+  let score = progress*20 - lateral*3;
+  const minR = upcomingMinRadius(idx, progress, speed);
+  if(isFinite(minR)){
+    const maxSafeSpeed = Math.sqrt(minR) * OVERSPEED_K;
+    if(speed > maxSafeSpeed){
+      const over = speed - maxSafeSpeed;
+      score -= over*over*14;
+    }
+  }
+  return {score, idx};
+}
+
+// 遞迴評分：以 beam search 方式向前模擬 AI 未來幾步嘅最佳走法，
+// 每層只保留分數最高嘅幾個分支（beamWidth）再深入，避免全展開嘅組合爆炸，
+// 令困難模式可以睇得更深都夠快。pre 係父層已經計算好嘅 {score, idx}，避免重複計算
+function evalPoint(pt, prevPt, depth, beamWidth, hintIdx, pre){
+  const so = pre || baseScore(pt, prevPt, hintIdx);
+  const base = so.score, idx = so.idx;
+  if(base <= -5000 || depth<=0) return base;
+
+  const vel = {x:pt.x-prevPt.x, y:pt.y-prevPt.y};
+  const proj2 = addV(pt, vel);
+  const branch = countOnTrackNeighbors(pt, vel);
+  let score = base + branch*10;
+
+  const cands = [];
+  for(let dx=-1;dx<=1;dx++){
+    for(let dy=-1;dy<=1;dy++){
+      if(dx===0&&dy===0) continue;
+      const p2 = {x:proj2.x+dx, y:proj2.y+dy};
+      cands.push({p2, so: baseScore(p2, pt, idx)});
+    }
+  }
+  cands.sort((a,b)=>b.so.score-a.so.score);
+  const top = cands.slice(0, beamWidth);
+
+  let best2 = -Infinity;
+  for(const c of top){
+    const s2 = evalPoint(c.p2, pt, depth-1, beamWidth, idx, c.so);
+    if(s2>best2) best2 = s2;
+  }
+  if(best2 > -Infinity) score += best2*0.75;
+  return score;
+}
+
+function aiChoose(player, proj, opts){
+  if(!opts.length) return null;
+  const diff = DIFF[aiDifficulty];
+  const prev = lastPos(player);
+  if(Math.random() < diff.random){
+    const onTrackOpts = opts.filter(o => isOnTrack(o) && pathStaysOnTrack(prev, o));
+    const pool = onTrackOpts.length ? onTrackOpts : opts;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+  const prevIdx = trackProgress(prev, null).idx;
+  let best=null, bestScore=-Infinity;
+  for(const c of opts){
+    const s = evalPoint(c, prev, diff.depth, diff.beam, prevIdx, null);
+    if(s>bestScore){ bestScore=s; best=c; }
+  }
+  return best || opts[0];
+}
+
+// ---------- 繪製 ----------
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  if(!track) return;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth=1;
+  for(let i=0;i<=GRID;i+=1){
+    const a=toPx(i,0), b=toPx(i,GRID);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    const c=toPx(0,i), d=toPx(GRID,i);
+    ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(d.x,d.y); ctx.stroke();
+  }
+
+  ctx.beginPath();
+  track.polygon.forEach((p,i)=>{
+    const px = toPx(p.x,p.y);
+    if(i===0) ctx.moveTo(px.x,px.y); else ctx.lineTo(px.x,px.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(60,90,70,0.55)';
+  ctx.fill();
+
+  [track.left, track.right].forEach(curve=>{
+    ctx.beginPath();
+    curve.forEach((p,i)=>{
+      const px=toPx(p.x,p.y);
+      if(i===0) ctx.moveTo(px.x,px.y); else ctx.lineTo(px.x,px.y);
+    });
+    ctx.strokeStyle = '#e8c15a';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  });
+
+  drawGate(track.startGate, '#5ad1ff');
+  drawGate(track.finishGate, '#ff5d5d');
+  const fc = toPx(track.finishCenter.x, track.finishCenter.y);
+  ctx.beginPath();
+  ctx.arc(fc.x, fc.y, track.finishRadius*scale, 0, Math.PI*2);
+  ctx.strokeStyle='rgba(255,93,93,0.6)';
+  ctx.setLineDash([6,4]); ctx.lineWidth=1.5;
+  ctx.stroke(); ctx.setLineDash([]);
+
+  players.forEach(p=>{
+    ctx.beginPath();
+    p.path.forEach((pt,i)=>{
+      const px=toPx(pt.x,pt.y);
+      if(i===0) ctx.moveTo(px.x,px.y); else ctx.lineTo(px.x,px.y);
+    });
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 3;
+    ctx.lineJoin='round';
+    ctx.stroke();
+
+    p.path.forEach((pt,i)=>{
+      const px=toPx(pt.x,pt.y);
+      ctx.beginPath();
+      ctx.arc(px.x,px.y, i===0?5:4, 0, Math.PI*2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.strokeStyle='#0c1119'; ctx.lineWidth=1; ctx.stroke();
+    });
+  });
+
+  if(!gameOver && projected){
+    const player = players[turn];
+    const prev = lastPos(player);
+    candidates.forEach(c=>{
+      const a=toPx(prev.x,prev.y), b=toPx(c.x,c.y);
+      ctx.beginPath();
+      ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle='rgba(255,255,255,0.25)';
+      ctx.setLineDash([3,3]); ctx.lineWidth=1;
+      ctx.stroke(); ctx.setLineDash([]);
+
+      const onTrack = (isOnTrack(c) || isFinish(c)) && pathStaysOnTrack(prev, c);
+      const px = toPx(c.x,c.y);
+      ctx.beginPath();
+      ctx.arc(px.x,px.y,10,0,Math.PI*2);
+      ctx.fillStyle = onTrack? 'rgba(255,255,255,0.9)' : 'rgba(255,60,60,0.55)';
+      ctx.fill();
+      ctx.strokeStyle = player.color; ctx.lineWidth=3; ctx.stroke();
+    });
+    const pp = toPx(projected.x, projected.y);
+    ctx.beginPath();
+    ctx.arc(pp.x,pp.y,3,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.fill();
+  }
+}
+
+function drawGate(gate, color){
+  const a=toPx(gate[0].x,gate[0].y), b=toPx(gate[1].x,gate[1].y);
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+  ctx.strokeStyle=color; ctx.lineWidth=3; ctx.stroke();
+}
+
+// ---------- 互動：縮放、拖曳、點擊／觸控 ----------
+let dragging=false, dragStart=null, dragOrigOffset=null, dragMoved=false;
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints>0;
+const TAP_RADIUS = isTouchDevice ? 32 : 24;
+const MOVE_THRESHOLD = isTouchDevice ? 10 : 5; // 手指/滑鼠移動超過此距離才視為拖曳，否則視為點擊
+
+function selectAt(px, py){
+  if(gameOver || animating || !track) return;
+  const player = players[turn];
+  if(player.isAI) return;
+  let best=null, bestD=Infinity;
+  candidates.forEach(c=>{
+    const cp = toPx(c.x,c.y);
+    const d = Math.hypot(cp.x-px, cp.y-py);
+    if(d<bestD){ bestD=d; best=c; }
+  });
+  if(best && bestD <= TAP_RADIUS){
+    confirmMove(best);
+  }
+}
+
+wrap.addEventListener('mousedown', e=>{
+  dragging=true; dragMoved=false;
+  dragStart={x:e.clientX,y:e.clientY}; dragOrigOffset={x:offsetX,y:offsetY};
+  wrap.classList.add('dragging');
+});
+window.addEventListener('mouseup', ()=>{ dragging=false; wrap.classList.remove('dragging'); });
+window.addEventListener('mousemove', e=>{
+  if(dragging){
+    const dx=e.clientX-dragStart.x, dy=e.clientY-dragStart.y;
+    if(!dragMoved && Math.hypot(dx,dy) < MOVE_THRESHOLD) return;
+    dragMoved=true;
+    offsetX = dragOrigOffset.x + dx;
+    offsetY = dragOrigOffset.y + dy;
+    draw();
+  }
+});
+wrap.addEventListener('click', e=>{
+  if(dragMoved){ dragMoved=false; return; }
+  const rect = cv.getBoundingClientRect();
+  selectAt(e.clientX-rect.left, e.clientY-rect.top);
+});
+
+// 觸控：單指拖曳/點擊、雙指縮放
+let pinchStartDist = null, pinchStartScale = null, pinchMidGrid = null;
+function touchDist(t0,t1){ return Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY); }
+function touchMid(t0,t1,rect){ return {x:(t0.clientX+t1.clientX)/2-rect.left, y:(t0.clientY+t1.clientY)/2-rect.top}; }
+
+wrap.addEventListener('touchstart', e=>{
+  const rect = cv.getBoundingClientRect();
+  if(e.touches.length===1){
+    dragging=true; dragMoved=false;
+    dragStart={x:e.touches[0].clientX, y:e.touches[0].clientY};
+    dragOrigOffset={x:offsetX,y:offsetY};
+    pinchStartDist=null;
+  } else if(e.touches.length===2){
+    dragging=false;
+    pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+    pinchStartScale = scale;
+    const mid = touchMid(e.touches[0], e.touches[1], rect);
+    pinchMidGrid = toGrid(mid.x, mid.y);
+  }
+  e.preventDefault();
+}, {passive:false});
+
+wrap.addEventListener('touchmove', e=>{
+  const rect = cv.getBoundingClientRect();
+  if(e.touches.length===1 && dragging){
+    const dx=e.touches[0].clientX-dragStart.x, dy=e.touches[0].clientY-dragStart.y;
+    if(!dragMoved && Math.hypot(dx,dy) < MOVE_THRESHOLD){ e.preventDefault(); return; }
+    dragMoved=true;
+    offsetX = dragOrigOffset.x + dx;
+    offsetY = dragOrigOffset.y + dy;
+    draw();
+  } else if(e.touches.length===2 && pinchStartDist){
+    const d = touchDist(e.touches[0], e.touches[1]);
+    scale = clampNum(pinchStartScale * (d/pinchStartDist), 1.5, 30);
+    const mid = touchMid(e.touches[0], e.touches[1], rect);
+    const after = toPx(pinchMidGrid.x, pinchMidGrid.y);
+    offsetX += mid.x-after.x;
+    offsetY += mid.y-after.y;
+    draw();
+  }
+  e.preventDefault();
+}, {passive:false});
+
+wrap.addEventListener('touchend', e=>{
+  const rect = cv.getBoundingClientRect();
+  if(e.touches.length===0 && e.changedTouches.length===1 && !dragMoved && pinchStartDist===null){
+    const t = e.changedTouches[0];
+    selectAt(t.clientX-rect.left, t.clientY-rect.top);
+  }
+  if(e.touches.length<2) pinchStartDist=null;
+  if(e.touches.length===0){ dragging=false; dragMoved=false; }
+  e.preventDefault();
+}, {passive:false});
+
+wrap.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+  const before = toGrid(mx,my);
+  const factor = e.deltaY<0 ? 1.1 : 0.9;
+  scale = clampNum(scale*factor, 1.5, 30);
+  const after = toPx(before.x, before.y);
+  offsetX += mx-after.x;
+  offsetY += my-after.y;
+  draw();
+}, {passive:false});
+
+document.getElementById('btnZoomIn').onclick = ()=> zoomCenter(1.2);
+document.getElementById('btnZoomOut').onclick = ()=> zoomCenter(1/1.2);
+function zoomCenter(f){
+  const cx=wrap.clientWidth/2, cy=wrap.clientHeight/2;
+  const before = toGrid(cx,cy);
+  scale = clampNum(scale*f, 1.5, 30);
+  const after = toPx(before.x, before.y);
+  offsetX += cx-after.x; offsetY += cy-after.y;
+  draw();
+}
+document.getElementById('btnReset').onclick = ()=>{ fitView(); draw(); };
+
+// ---------- 畫面切換 ----------
+const homeScreen = document.getElementById('homeScreen');
+const gameScreen = document.getElementById('gameScreen');
+
+document.getElementById('btnPvp').onclick = ()=>{ mode='pvp'; showGame(); };
+document.getElementById('btnAi').onclick = ()=>{ document.getElementById('diffBox').classList.add('show'); };
+document.querySelectorAll('.diffBtn').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('.diffBtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+    aiDifficulty = b.dataset.d;
+  };
+});
+document.getElementById('btnStartAi').onclick = ()=>{ mode='ai'; showGame(); };
+document.querySelectorAll('#lengthRow .diffBtn').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#lengthRow .diffBtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+    lengthBands = parseInt(b.dataset.len, 10);
+  };
+});
+document.querySelectorAll('#sizeRow .diffBtn').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#sizeRow .diffBtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+    GRID = parseInt(b.dataset.size, 10);
+  };
+});
+document.getElementById('btnHome').onclick = goHome;
+document.getElementById('btnBackHome').onclick = goHome;
+document.getElementById('btnAgain').onclick = ()=>{
+  document.getElementById('overlay').classList.remove('show');
+  initGame();
+};
+
+function showGame(){
+  homeScreen.style.display='none';
+  gameScreen.style.display='flex';
+  document.getElementById('overlay').classList.remove('show');
+  requestAnimationFrame(()=>{
+    resizeCanvas();
+    initGame();
+  });
+}
+function goHome(){
+  gameScreen.style.display='none';
+  homeScreen.style.display='flex';
+  document.getElementById('diffBox').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+})();
+</script>
+</body>
+</html>
