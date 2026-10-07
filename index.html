@@ -64,13 +64,20 @@
     .stick{width:104px;height:104px;} .pPanel,.pPanel.right{flex-direction:column;gap:4px;} .info{align-items:center;font-size:.78em;}
     #hint{display:none;}
   }
+  .nameRow{display:flex;align-items:center;gap:6px;}
+  .wheel{width:40px;height:40px;flex:none;}
+  .wheel svg{width:100%;height:100%;display:block;}
+  #replayBar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:none;align-items:center;gap:8px;background:rgba(26,34,51,.94);padding:8px 12px;border-radius:12px;width:min(580px,94%);border:1px solid #3a4864;}
+  #replayBar.show{display:flex;}
+  #replayBar input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
+  #rpTime{font-variant-numeric:tabular-nums;font-size:.85em;color:var(--muted);min-width:84px;text-align:center;}
 </style>
 </head>
 <body>
 
 <div id="homeScreen">
   <h1>🏎️ F1 物理賽車對戰</h1>
-  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 1 秒，雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑 1 秒物理模擬。先衝過終點線者勝，撞牆即出局。</p>
+  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 1 秒，雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑 1 秒物理模擬。先衝過終點線者勝，撞牆即出局；賽車之間會真實碰撞，賽後可重播整場。</p>
 
   <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
     <div>
@@ -110,19 +117,21 @@
     <canvas id="cv"></canvas>
     <div id="overlay"><div id="overlayBox">
       <h2 id="overlayTitle"></h2><p id="overlayMsg"></p>
+      <button class="bigBtn" id="btnReplay">🔁 重播</button>
       <button class="bigBtn" id="btnAgain">再來一局（新賽道）</button>
       <button class="bigBtn" id="btnBackHome">返回主頁</button>
     </div></div>
+    <div id="replayBar"><button class="ctrlBtn" id="rpPlay">⏸</button><input type="range" id="rpSlider" min="0" max="1000" value="0"><span id="rpTime">0.0 / 0 s</span><button class="ctrlBtn" id="rpSpeed">1×</button><button class="ctrlBtn" id="rpExit">✕ 結束</button></div>
   </div>
   <div id="controls">
     <div class="pPanel" id="panel0" style="--c:var(--p1)">
       <div class="stick" id="stick0"><span class="u">加速</span><span class="d">煞車</span><span class="l">左</span><span class="r">右</span><div class="knob"></div></div>
-      <div class="info"><div class="name">玩家1</div><div class="spd"><span id="spd0">0</span> <small>km/h</small></div>
+      <div class="info"><div class="nameRow"><div class="wheel" id="wheel0"></div><div class="name">玩家1</div></div><div class="spd"><span id="spd0">0</span> <small>km/h</small></div>
         <div class="mut" id="rd0"></div><div class="mut" id="pv0"></div><button class="okBtn" id="ok0">確認 OK</button></div>
     </div>
     <div class="pPanel right" id="panel1" style="--c:var(--p2)">
       <div class="stick" id="stick1"><span class="u">加速</span><span class="d">煞車</span><span class="l">左</span><span class="r">右</span><div class="knob"></div></div>
-      <div class="info" style="align-items:flex-end"><div class="name" id="name1">玩家2</div><div class="spd"><span id="spd1">0</span> <small>km/h</small></div>
+      <div class="info" style="align-items:flex-end"><div class="nameRow"><div class="wheel" id="wheel1"></div><div class="name" id="name1">玩家2</div></div><div class="spd"><span id="spd1">0</span> <small>km/h</small></div>
         <div class="mut" id="rd1"></div><div class="mut" id="pv1"></div><button class="okBtn" id="ok1">確認 OK</button></div>
     </div>
   </div>
@@ -151,6 +160,7 @@ const CAR = {L:3.6, PWR:390, AMAX:13, BMAX:42, DRAG:0.0009, MU0:1.6, DF:0.0005, 
 
 let track=null, players=[], step=0, phase='idle', deadline=0, simStart=0, gameOver=false, follow=false, running=false;
 let scale=6, offsetX=40, offsetY=40;
+let history=[], hitMarks=[], curHits=[], replay=null, lastFrame=0;
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d'), wrap=document.getElementById('canvasWrap');
 function resizeCanvas(){ cv.width=wrap.clientWidth; cv.height=wrap.clientHeight; draw(); }
@@ -386,12 +396,12 @@ function wheelsOut(c,fast){
 }
 // 模擬 n 個子步；回傳終態、逐幀軌跡、事件（過線 finish / 撞牆 crash 及其發生時間）
 function simulate(c0, cmd, dt, n, fast){
-  const c={...c0}, frames=[{x:c.x,y:c.y,h:c.h,v:c.v}]; let ev=null;
+  const c={...c0}, frames=[{x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss}]; let ev=null;
   const g0=track.finishGate[0], g1=track.finishGate[1];
   for(let i=1;i<=n;i++){
     const a={x:c.x,y:c.y};
     stepCar(c, cmd.thr, cmd.str, dt);
-    frames.push({x:c.x,y:c.y,h:c.h,v:c.v});
+    frames.push({x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss});
     if(segIntersect(a,c,g0,g1)){ ev={type:'finish',t:i*dt}; break; }
     if(fast){
       const nc=nearestCenter(c, c.idx); c.idx=nc.idx; c.lat=nc.d;
@@ -402,9 +412,55 @@ function simulate(c0, cmd, dt, n, fast){
   return {car:c, frames, ev};
 }
 
+// ---------- 車與車碰撞（旋轉矩形 SAT） ----------
+function carBox(c){ const ch=Math.cos(c.h), sh=Math.sin(c.h); return {x:c.x+ch*0.25, y:c.y+sh*0.25, ux:ch, uy:sh, hl:2.65, hw:0.95}; }
+function obbHit(A,B){
+  const axes=[[A.ux,A.uy],[-A.uy,A.ux],[B.ux,B.uy],[-B.uy,B.ux]], dx=B.x-A.x, dy=B.y-A.y; let best=null;
+  for(const [ax,ay] of axes){
+    const rA=A.hl*Math.abs(ax*A.ux+ay*A.uy)+A.hw*Math.abs(-ax*A.uy+ay*A.ux);
+    const rB=B.hl*Math.abs(ax*B.ux+ay*B.uy)+B.hw*Math.abs(-ax*B.uy+ay*B.ux);
+    const d=dx*ax+dy*ay, ov=rA+rB-Math.abs(d);
+    if(ov<=0) return null;
+    if(!best||ov<best.d){ const sg=d<0?-1:1; best={nx:ax*sg, ny:ay*sg, d:ov, rA}; }
+  }
+  best.px=A.x+best.nx*(best.rA-best.d/2); best.py=A.y+best.ny*(best.rA-best.d/2);
+  return best;
+}
+// 分開重疊、交換動量（恢復係數 0.25、少量切向摩擦），車頭被撞偏、損失速度
+function resolveCollision(a,b){
+  const h=obbHit(carBox(a),carBox(b)); if(!h) return null;
+  const sp=h.d/2+0.01; a.x-=h.nx*sp; a.y-=h.ny*sp; b.x+=h.nx*sp; b.y+=h.ny*sp;
+  const va={x:Math.cos(a.h)*a.v,y:Math.sin(a.h)*a.v}, vb={x:Math.cos(b.h)*b.v,y:Math.sin(b.h)*b.v};
+  const rel=(vb.x-va.x)*h.nx+(vb.y-va.y)*h.ny, power=Math.max(0,-rel);
+  if(rel<0){
+    const j=-(1.25)*rel/2; va.x-=j*h.nx; va.y-=j*h.ny; vb.x+=j*h.nx; vb.y+=j*h.ny;
+    const tx=-h.ny, ty=h.nx, f=0.1*((vb.x-va.x)*tx+(vb.y-va.y)*ty);
+    va.x+=f*tx; va.y+=f*ty; vb.x-=f*tx; vb.y-=f*ty;
+  }
+  [[a,va],[b,vb]].forEach(([c,v])=>{
+    if(Math.hypot(v.x,v.y)>1.5){ let d=Math.atan2(v.y,v.x)-c.h; d=Math.atan2(Math.sin(d),Math.cos(d)); c.h+=d*0.5; }
+    c.v=Math.max(0,(v.x*Math.cos(c.h)+v.y*Math.sin(c.h))*0.97);
+  });
+  return {x:h.px,y:h.py,power};
+}
+// 雙車同步模擬（含碰撞）。回傳每位玩家的 {car,frames,ev} 與碰撞事件
+function simulateJoint(cmds){
+  const cs=players.map(p=>({...p.car})), snap=c=>({x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss});
+  const fr=cs.map(c=>[snap(c)]), evs=[null,null], hits=[], g0=track.finishGate[0], g1=track.finishGate[1]; let lastHit=-1;
+  for(let i=1;i<=SUB;i++){
+    const t=i*DT;
+    cs.forEach((c,k)=>{ if(evs[k]) return; const a={x:c.x,y:c.y}; stepCar(c,cmds[k].thr,cmds[k].str,DT);
+      if(segIntersect(a,c,g0,g1)){ evs[k]={type:'finish',t}; fr[k].push(snap(c)); } });
+    if(!evs[0]&&!evs[1]){ const h=resolveCollision(cs[0],cs[1]); if(h&&h.power>1&&t-lastHit>=0.2){ hits.push({t,x:h.x,y:h.y,power:h.power}); lastHit=t; } }
+    cs.forEach((c,k)=>{ if(evs[k]) return; c.nOut=wheelsOut(c,false); if(c.nOut>=4) evs[k]={type:'crash',t}; fr[k].push(snap(c)); });
+    if(evs[0]&&evs[1]) break;
+  }
+  return {res:cs.map((c,k)=>({car:c,frames:fr[k],ev:evs[k]})), hits};
+}
+
 // ---------- 遊戲流程 ----------
 function newPlayer(id,color,start,h,isAI){
-  return {id,color,isAI, car:{x:start.x,y:start.y,h,v:0,ts:0,ss:0,idx:0,slip:0,nOut:0}, stick:{x:0,y:0.6},
+  return {id,color,isAI, car:{x:start.x,y:start.y,h,v:0,ts:0,ss:0,idx:0,slip:0,nOut:0}, stick:{x:0,y:0.6}, wheel:0,
           trail:[{x:start.x,y:start.y}], marks:[], ready:false, cmd:null, sim:null, preview:null, finT:null};
 }
 function initGame(){
@@ -419,13 +475,13 @@ function initGame(){
   document.getElementById('stick1').style.display = mode==='ai' ? 'none' : '';
   document.getElementById('ok1').style.display = mode==='ai' ? 'none' : '';
   document.getElementById('pv1').style.display = mode==='ai' ? 'none' : '';
-  step=0; gameOver=false; phase='idle';
-  fitView(); if(follow) scale=3.5; beginStep();
+  step=0; gameOver=false; phase='idle'; history=[]; hitMarks=[]; curHits=[]; replay=null; document.getElementById('replayBar').classList.remove('show');
+  fitView(); if(follow) scale=4.5; beginStep();
   if(!running){ running=true; requestAnimationFrame(loop); }
 }
 function beginStep(){
   step++; phase='decide'; deadline=performance.now()+DECIDE_MS;
-  players.forEach(p=>{ p.ready=false; p.cmd=null; p.sim=null; });
+  players.forEach(p=>{ p.ready=false; p.cmd=null; p.sim=null; }); curHits=[];
   players.forEach(p=>{
     if(p.isAI){ setTimeout(()=>aiDecide(p), 60); }
     else { updatePreview(p); renderStick(p); }
@@ -439,7 +495,7 @@ function setReady(p){
   if(players.every(q=>q.ready)) startSim();
 }
 function startSim(){
-  players.forEach(p=>{ p.sim=simulate(p.car,p.cmd,DT,SUB,false); });
+  const r=simulateJoint(players.map(p=>p.cmd)); players.forEach((p,k)=>{ p.sim=r.res[k]; }); curHits=r.hits;
   simStart=performance.now(); phase='sim'; updatePanels();
 }
 function finishSim(){
@@ -449,6 +505,8 @@ function finishSim(){
     const l=p.sim.frames[p.sim.frames.length-1]; p.trail.push({x:l.x,y:l.y}); p.marks.push({x:l.x,y:l.y});
     if(p.sim.ev&&p.sim.ev.type==='finish') p.finT=(step-1)+p.sim.ev.t;
   });
+  history.push({frames:players.map(p=>p.sim.frames), hits:curHits.map(h=>({...h,t:h.t+step-1}))});
+  curHits.forEach(h=>hitMarks.push({x:h.x,y:h.y}));
   const evs=players.filter(p=>p.sim.ev).map(p=>({p,ev:p.sim.ev})).sort((a,b)=>a.ev.t-b.ev.t);
   phase='idle';
   if(evs.length){
@@ -491,7 +549,7 @@ function updatePanels(){
   });
   if(mode==='ai'){ const p=players[1]; document.getElementById('rd1').textContent = phase==='decide' ? (p.ready?'AI 已就緒 ✓':'AI 思考中…') : ''; }
   const pb=document.getElementById('phaseBadge');
-  pb.textContent = phase==='decide' ? '決策中' : phase==='sim' ? '模擬 1 秒…' : phase==='over' ? '結束' : '…';
+  pb.textContent = phase==='decide' ? '決策中' : phase==='sim' ? '模擬 1 秒…' : phase==='over' ? '結束' : phase==='replay' ? '🎬 重播' : '…';
   document.getElementById('stepBadge').textContent='步驟 '+step;
   document.getElementById('timeBadge').textContent='t = '+(phase==='sim'?step:step-1)+' s';
 }
@@ -567,26 +625,40 @@ function aiDecide(p){
 // ---------- 主迴圈 / 繪製 ----------
 function loop(){
   if(!track){ running=false; return; }
-  const now=performance.now();
+  const now=performance.now(), dt=Math.min(0.1,(now-(lastFrame||now))/1000); lastFrame=now;
+  const bar=document.getElementById('timerBar');
   if(phase==='decide'){
     const rem=Math.max(0,deadline-now);
-    document.getElementById('timerBar').style.width=(rem/DECIDE_MS*100)+'%';
-    document.getElementById('timerBar').style.background = rem<2500?'#ff5964':'var(--accent)';
+    bar.style.width=(rem/DECIDE_MS*100)+'%';
+    bar.style.background = rem<2500?'#ff5964':'var(--accent)';
     document.getElementById('phaseBadge').textContent='決策中 '+(rem/1000).toFixed(1)+'s';
     if(rem<=0){ players.forEach(p=>{ if(!p.isAI) setReady(p); else if(!p.ready) aiDecide(p); }); }
   } else if(phase==='sim'){
-    document.getElementById('timerBar').style.width=((1-(now-simStart)/1000)*100)+'%';
+    bar.style.width=((1-(now-simStart)/1000)*100)+'%';
     if(now-simStart>=1000) finishSim();
+  } else if(phase==='replay'&&replay){
+    if(replay.playing&&!replay.scrub){ replay.t+=dt*replay.speed; if(replay.t>=replay.total){ replay.t=replay.total; replay.playing=false; rpPlay.textContent='▶'; } }
+    if(!replay.scrub) rpSlider.value=replay.t/replay.total*1000;
+    rpTime.textContent=replay.t.toFixed(1)+' / '+replay.total+' s';
+    document.getElementById('timeBadge').textContent='t = '+replay.t.toFixed(1)+' s';
+    bar.style.width=(100-replay.t/replay.total*100)+'%'; bar.style.background='var(--accent)';
   }
-  players.forEach(p=>{ document.getElementById('spd'+p.id).textContent=Math.round(carView(p).v*3.6); });
+  players.forEach(p=>{
+    const v=carView(p); document.getElementById('spd'+p.id).textContent=Math.round(v.v*3.6);
+    const tg=phase==='decide'?p.stick.x:(v.ss||0);           // 方向盤：決策時跟搖桿，模擬／重播時跟實際轉向
+    p.wheel+=(tg-p.wheel)*Math.min(1,dt*14);
+    document.getElementById('wheel'+p.id).firstChild.style.transform='rotate('+(p.wheel*100).toFixed(1)+'deg)';
+  });
   draw();
   requestAnimationFrame(loop);
 }
+function interp(f,k){
+  k=clampNum(k,0,f.length-1); const i=Math.floor(k), j=Math.min(i+1,f.length-1), u=k-i, a=f[i], b=f[j];
+  return {x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u, h:a.h+(b.h-a.h)*u, v:a.v+(b.v-a.v)*u, ss:a.ss+(b.ss-a.ss)*u, k:i};
+}
 function carView(p){
-  if(phase==='sim'&&p.sim){
-    const f=p.sim.frames, k=clampNum((performance.now()-simStart)/1000/DT,0,f.length-1), i=Math.floor(k), j=Math.min(i+1,f.length-1), u=k-i;
-    return {x:f[i].x+(f[j].x-f[i].x)*u, y:f[i].y+(f[j].y-f[i].y)*u, h:f[i].h+(f[j].h-f[i].h)*u, v:f[i].v+(f[j].v-f[i].v)*u, k:i};
-  }
+  if(phase==='replay'&&replay) return interp(replay.flat[p.id],replay.t/DT);
+  if(phase==='sim'&&p.sim) return interp(p.sim.frames,(performance.now()-simStart)/1000/DT);
   return p.car;
 }
 function pathLine(pts,color,w,dash){
@@ -596,11 +668,14 @@ function pathLine(pts,color,w,dash){
 function draw(){
   ctx.clearRect(0,0,cv.width,cv.height);
   if(!track) return;
-  const views=players.map(carView);
+  const views=players.map(carView), inRp=phase==='replay'&&replay;
+  const T=inRp?replay.t:(phase==='sim'?(performance.now()-simStart)/1000:-1), fxs=[]; let shake=0;
+  if(T>=0) (inRp?replay.hits:curHits).forEach(h=>{ const age=T-h.t; if(age>=0&&age<0.8){ fxs.push({h,age}); if(age<0.3) shake=Math.max(shake,Math.min(6,h.power*0.4)*(1-age/0.3)); } });
   if(follow){
     const tg = mode==='ai'?[views[0]]:views, cx=tg.reduce((s,v)=>s+v.x,0)/tg.length, cy=tg.reduce((s,v)=>s+v.y,0)/tg.length;
     offsetX=wrap.clientWidth/2-cx*scale; offsetY=wrap.clientHeight/2-cy*scale;
   }
+  ctx.save(); if(shake>0) ctx.translate((Math.random()-.5)*shake*2,(Math.random()-.5)*shake*2);
   const a=toPx(0,0); ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1; ctx.strokeRect(a.x,a.y,GRID*scale,GRID*scale);
 
   ctx.beginPath();
@@ -610,27 +685,57 @@ function draw(){
   drawGate(track.startGate,'#5ad1ff'); drawGate(track.finishGate,'#ff5d5d');
 
   players.forEach((p,i)=>{
-    const pts=p.trail.slice();
-    if(phase==='sim'&&p.sim){ const f=p.sim.frames, k=views[i].k; for(let n=0;n<=k;n+=2) pts.push(f[n]); pts.push(views[i]); }
+    let pts, marks=p.marks;
+    if(inRp){
+      const f=replay.flat[i], kk=Math.min(f.length-1,Math.floor(replay.t/DT)); pts=[];
+      for(let n=0;n<=kk;n+=3) pts.push(f[n]); pts.push(views[i]);
+      marks=[]; for(let s=1;s*SUB<=kk;s++) marks.push(f[s*SUB]);
+    } else {
+      pts=p.trail.slice();
+      if(phase==='sim'&&p.sim){ const f=p.sim.frames, k=views[i].k; for(let n=0;n<=k;n+=2) pts.push(f[n]); pts.push(views[i]); }
+    }
     pathLine(pts,p.color,2.5);
-    p.marks.forEach(m=>{ const q=toPx(m.x,m.y); ctx.beginPath(); ctx.arc(q.x,q.y,3.5,0,7); ctx.fillStyle=p.color; ctx.fill(); ctx.strokeStyle='#0c1119'; ctx.lineWidth=1; ctx.stroke(); });
+    marks.forEach(m=>{ const q=toPx(m.x,m.y); ctx.beginPath(); ctx.arc(q.x,q.y,3.5,0,7); ctx.fillStyle=p.color; ctx.fill(); ctx.strokeStyle='#0c1119'; ctx.lineWidth=1; ctx.stroke(); });
     if(phase==='decide'&&!p.isAI&&p.preview){
       const fr=p.preview.frames; pathLine(fr,'rgba(255,255,255,0.85)',2,[5,4]);
       const e=toPx(fr[fr.length-1].x,fr[fr.length-1].y);
       ctx.beginPath(); ctx.arc(e.x,e.y,7,0,7); ctx.fillStyle=p.preview.ev&&p.preview.ev.type==='crash'?'rgba(255,60,60,.8)':'rgba(255,255,255,.35)'; ctx.fill(); ctx.strokeStyle=p.color; ctx.lineWidth=2; ctx.stroke();
     }
   });
-  players.forEach((p,i)=>drawCar(views[i],p.color));
+  // 碰撞痕跡（橘色 ✕）
+  (inRp?replay.hits.filter(h=>h.t<=replay.t):hitMarks).forEach(h=>{ const q=toPx(h.x,h.y); ctx.strokeStyle='#ff9a3c'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(q.x-5,q.y-5); ctx.lineTo(q.x+5,q.y+5); ctx.moveTo(q.x+5,q.y-5); ctx.lineTo(q.x-5,q.y+5); ctx.stroke(); });
+  players.forEach((p,i)=>drawCar(views[i],p.color,p.wheel));
+  // 碰撞特效：衝擊環、火花、文字
+  fxs.forEach(({h,age})=>{
+    const q=toPx(h.x,h.y);
+    ctx.save(); ctx.globalAlpha=1-age/0.8;
+    ctx.beginPath(); ctx.arc(q.x,q.y,8+age*70,0,7); ctx.strokeStyle='#ffd45a'; ctx.lineWidth=3; ctx.stroke();
+    ctx.strokeStyle='#ff9a3c'; ctx.lineWidth=2;
+    for(let n=0;n<12;n++){ const ang=n*0.5236+h.t*7, r0=6+age*50, r1=r0+14+Math.sin(n*5.1)*6;
+      ctx.beginPath(); ctx.moveTo(q.x+Math.cos(ang)*r0,q.y+Math.sin(ang)*r0); ctx.lineTo(q.x+Math.cos(ang)*r1,q.y+Math.sin(ang)*r1); ctx.stroke(); }
+    ctx.font='bold 18px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.fillText('💥 碰撞！',q.x,q.y-22-age*20);
+    ctx.restore();
+  });
+  ctx.restore();
 }
-function drawCar(v,color){
-  const q=toPx(v.x,v.y), k=scale*Math.max(1,16/(5.6*scale));
+function drawCar(v,color,wheel){
+  const q=toPx(v.x,v.y), k=Math.max(scale,5), st=wheel||0;   // 車身至少畫成 ~5 px/m，輪胎轉向才看得清楚
   ctx.save(); ctx.translate(q.x,q.y); ctx.rotate(v.h); ctx.scale(k,k);
-  ctx.fillStyle='#111';
-  for(const fx of [1.8,-1.8]) for(const fy of [-0.8,0.8]) ctx.fillRect(fx-0.45,fy-0.2,0.9,0.4);   // 四個輪胎
+  ctx.strokeStyle='#666'; ctx.lineWidth=0.12;
+  for(const fx of [1.8,-1.8]){ ctx.beginPath(); ctx.moveTo(fx,-0.8); ctx.lineTo(fx,0.8); ctx.stroke(); }   // 車軸
+  for(const fx of [1.8,-1.8]) for(const fy of [-0.8,0.8]){
+    ctx.save(); ctx.translate(fx,fy);
+    if(fx>0) ctx.rotate(st*0.55);                                  // 前輪隨轉向偏轉（約 ±31°）
+    ctx.fillStyle='#111'; ctx.fillRect(-0.55,-0.25,1.1,0.5);
+    if(fx>0){ ctx.fillStyle='#ddd'; ctx.fillRect(-0.4,-0.04,0.8,0.08); }   // 胎面標記，讓轉動清楚可見
+    ctx.restore();
+  }
   ctx.fillStyle=color;
   ctx.beginPath(); ctx.moveTo(2.9,0); ctx.lineTo(1.2,-0.35); ctx.lineTo(-0.5,-0.5); ctx.lineTo(-2.4,-0.4); ctx.lineTo(-2.4,0.4); ctx.lineTo(-0.5,0.5); ctx.lineTo(1.2,0.35); ctx.closePath(); ctx.fill();
   ctx.fillRect(2.4,-0.95,0.4,1.9); ctx.fillRect(-2.9,-0.7,0.4,1.4);      // 前後尾翼
   ctx.fillStyle='#0c1119'; ctx.fillRect(-0.4,-0.2,0.9,0.4);               // 駕駛艙
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(-0.05,0,0.2,0,7); ctx.fill();   // 頭盔
+  ctx.save(); ctx.translate(0.4,0); ctx.rotate(st*1.6); ctx.fillStyle='#ddd'; ctx.fillRect(-0.06,-0.26,0.12,0.52); ctx.restore();  // 方向盤
   ctx.restore();
 }
 function drawGate(g,color){ pathLine(g,color,3); }
@@ -664,7 +769,7 @@ wrap.addEventListener('wheel',e=>{ e.preventDefault(); const r=cv.getBoundingCli
 document.getElementById('btnZoomIn').onclick=()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.25);
 document.getElementById('btnZoomOut').onclick=()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,0.8);
 document.getElementById('btnReset').onclick=()=>{ follow=false; document.getElementById('btnFollow').classList.remove('on'); fitView(); };
-document.getElementById('btnFollow').onclick=function(){ follow=!follow; this.classList.toggle('on',follow); if(follow) scale=3.5; else fitView(); };
+document.getElementById('btnFollow').onclick=function(){ follow=!follow; this.classList.toggle('on',follow); if(follow) scale=4.5; else fitView(); };
 
 // ---------- 畫面切換 ----------
 const homeScreen=document.getElementById('homeScreen'), gameScreen=document.getElementById('gameScreen');
@@ -686,9 +791,39 @@ function showGame(){
   requestAnimationFrame(()=>{ resizeCanvas(); initGame(); });
 }
 function goHome(){
-  phase='idle'; track=null; players=[]; gameScreen.style.display='none'; homeScreen.style.display='flex';
+  phase='idle'; track=null; players=[]; replay=null; replayBar.classList.remove('show'); gameScreen.style.display='none'; homeScreen.style.display='flex';
   document.getElementById('diffBox').classList.remove('show'); document.getElementById('overlay').classList.remove('show');
 }
+const WHEEL_SVG='<svg viewBox="0 0 100 100"><rect x="14" y="24" width="72" height="52" rx="20" style="fill:#10172a;stroke:var(--c);stroke-width:6"/><rect x="2" y="28" width="16" height="44" rx="7" style="fill:var(--c)"/><rect x="82" y="28" width="16" height="44" rx="7" style="fill:var(--c)"/><rect x="45" y="4" width="10" height="22" rx="3" fill="#fff"/><circle cx="50" cy="50" r="9" style="fill:var(--c)"/></svg>';
+['wheel0','wheel1'].forEach(id=>{ document.getElementById(id).innerHTML=WHEEL_SVG; });
+
+// ---------- 重播 ----------
+const rpPlay=document.getElementById('rpPlay'), rpSlider=document.getElementById('rpSlider'), rpTime=document.getElementById('rpTime'), rpSpeed=document.getElementById('rpSpeed'), replayBar=document.getElementById('replayBar');
+const RP_SPEEDS=[0.25,0.5,1,2,4];
+function startReplay(){
+  if(!history.length) return;
+  const flat=[0,1].map(k=>{ const arr=[]; history.forEach((h,si)=>{ const fr=h.frames[k]; for(let i=si===0?0:1;i<fr.length;i++) arr.push(fr[i]); }); return arr; });
+  const hits=[]; history.forEach(h=>h.hits.forEach(x=>hits.push(x)));
+  replay={flat,hits,t:0,playing:true,speed:1,total:history.length,scrub:false};
+  phase='replay'; players.forEach(p=>{ p.wheel=0; });
+  document.getElementById('overlay').classList.remove('show'); replayBar.classList.add('show');
+  rpPlay.textContent='⏸'; rpSpeed.textContent='1×'; updatePanels();
+}
+function exitReplay(){
+  replay=null; replayBar.classList.remove('show'); phase='over';
+  document.getElementById('overlay').classList.add('show'); updatePanels();
+}
+rpPlay.onclick=()=>{ if(!replay) return; if(replay.t>=replay.total){ replay.t=0; replay.playing=true; } else replay.playing=!replay.playing; rpPlay.textContent=replay.playing?'⏸':'▶'; };
+rpSlider.addEventListener('pointerdown',()=>{ if(replay) replay.scrub=true; });
+window.addEventListener('pointerup',()=>{ if(replay) replay.scrub=false; });
+rpSlider.addEventListener('input',()=>{ if(replay) replay.t=rpSlider.value/1000*replay.total; });
+rpSpeed.onclick=()=>{ if(!replay) return; const i=(RP_SPEEDS.indexOf(replay.speed)+1)%RP_SPEEDS.length; replay.speed=RP_SPEEDS[i]; rpSpeed.textContent=replay.speed+'×'; };
+document.getElementById('rpExit').onclick=exitReplay;
+document.getElementById('btnReplay').onclick=startReplay;
+// 避免畫布的拖曳／縮放／touch preventDefault 吃掉重播列與結果視窗的操作
+['replayBar','overlay'].forEach(id=>{ const el=document.getElementById(id);
+  ['mousedown','touchstart','touchmove','touchend','wheel'].forEach(n=>el.addEventListener(n,e=>e.stopPropagation(),{passive:true})); });
+
 makeStick(0); makeStick(1);
 })();
 </script>
