@@ -71,6 +71,17 @@
   #replayBar.show{display:flex;}
   #replayBar input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
   #rpTime{font-variant-numeric:tabular-nums;font-size:.85em;color:var(--muted);min-width:84px;text-align:center;}
+  select,input[type=range]{accent-color:var(--accent);}
+  #editorScreen{display:none;height:100%;flex-direction:column;}
+  #eTop{display:flex;gap:6px;padding:8px 10px;background:var(--panel);flex-wrap:wrap;align-items:center;}
+  #eTop label{font-size:.85em;display:flex;align-items:center;gap:4px;}
+  #eWrap{flex:1;min-height:0;position:relative;overflow:hidden;}
+  #ecv{display:block;background:#0c1119;touch-action:none;}
+  #eStat{padding:7px 12px;background:var(--panel);font-size:.85em;color:var(--muted);}
+  #eStat.bad{color:#ff7b7b;} #eStat.good{color:var(--accent);}
+  #ioBox{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);} #ioBox.show{display:flex;}
+  #ioBox>div{background:var(--panel);padding:16px;border-radius:12px;width:min(540px,92%);display:flex;flex-direction:column;gap:8px;}
+  #ioBox textarea{height:170px;background:#10172a;color:var(--text);border:1px solid #3a4864;border-radius:6px;font-size:12px;}
 </style>
 </head>
 <body>
@@ -82,10 +93,11 @@
   <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
     <div>
       <div style="color:var(--muted);margin-bottom:6px;text-align:center;">賽道長度（起點 → 終點）</div>
-      <div class="diffRow" id="lengthRow"><button class="diffBtn" data-km="1.5">短 1.5 km</button><button class="diffBtn sel" data-km="3">標準 3 km</button><button class="diffBtn" data-km="4.5">長 4.5 km</button><button class="diffBtn" data-km="6">F1 6 km</button></div>
+      <div class="diffRow" id="lengthRow"><button class="diffBtn" data-km="1.5">短 1.5 km</button><button class="diffBtn sel" data-km="3">標準 3 km</button><button class="diffBtn" data-km="4.5">長 4.5 km</button><button class="diffBtn" data-km="6">F1 6 km</button><button class="diffBtn" data-km="custom" id="btnCustomSel" style="display:none">自訂賽道</button></div>
     </div>
   </div>
 
+  <button class="bigBtn" id="btnEditor">✏️ 賽道編輯器（自訂賽道）</button>
   <button class="bigBtn" id="btnPvp">👥 雙人對戰（同機雙搖桿）</button>
   <button class="bigBtn" id="btnAi">🤖 人機對戰</button>
   <div id="diffBox">
@@ -137,6 +149,28 @@
   </div>
 </div>
 
+<div id="editorScreen">
+  <div id="eTop">
+    <button class="ctrlBtn" id="eDel">🗑 刪點模式</button>
+    <button class="ctrlBtn" id="eUndo">↩ 復原</button>
+    <button class="ctrlBtn" id="eClear">清空</button>
+    <button class="ctrlBtn" id="eRev">⇄ 反向</button>
+    <button class="ctrlBtn" id="eRand">🎲 隨機底圖</button>
+    <label>賽道寬 <input type="range" id="eHW" min="10" max="24" value="14"><span id="eHWv">14</span> m</label>
+    <label>場地 <input type="range" id="eGridR" min="600" max="4000" step="100" value="2000"><span id="eGridV">2000</span> m</label>
+    <span class="spacer"></span>
+    <button class="ctrlBtn" id="eZin">＋</button><button class="ctrlBtn" id="eZout">－</button><button class="ctrlBtn" id="eFit">全景</button>
+    <button class="ctrlBtn" id="eIO">📋 匯出/匯入</button>
+    <button class="ctrlBtn" id="eUse" style="border-color:var(--accent);color:var(--accent)">✔ 使用此賽道</button>
+    <button class="ctrlBtn" id="eHome">主頁</button>
+  </div>
+  <div id="eWrap"><canvas id="ecv"></canvas>
+    <div id="ioBox"><div><b>匯出／匯入賽道（JSON）</b><textarea id="ioText"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="ctrlBtn" id="ioApply">套用匯入</button><button class="ctrlBtn" id="ioCopy">複製</button><button class="ctrlBtn" id="ioClose">關閉</button></div></div></div>
+  </div>
+  <div id="eStat"></div>
+</div>
+
 <script>
 (function(){
 'use strict';
@@ -150,9 +184,9 @@ const M = 1;               // 1 unit = 1 米
 const DECIDE_MS = 8000;    // 每步最長決策時間
 const DT = 0.02, SUB = 50; // 每步 1 秒 = 50 個 0.02s 物理子步
 const DIFF = {
-  easy:   {depth:2, beam:2, noise:0.35, cap:0.75},
-  medium: {depth:3, beam:3, noise:0.07, cap:1},
-  hard:   {depth:4, beam:3, noise:0,    cap:1}
+  easy:   {depth:2, beam:2, noise:0.35, cap:0.75, avoid:0.4},
+  medium: {depth:3, beam:3, noise:0.07, cap:1, avoid:0.6},
+  hard:   {depth:4, beam:3, noise:0,    cap:1, avoid:0.8}
 };
 
 // F1 風格車輛參數（SI 單位：m, s）
@@ -464,7 +498,7 @@ function newPlayer(id,color,start,h,isAI){
           trail:[{x:start.x,y:start.y}], marks:[], ready:false, cmd:null, sim:null, preview:null, finT:null};
 }
 function initGame(){
-  track=generateTrack();
+  track=(useCustom&&customTrack)?buildCustom():generateTrack();
   const c1=getComputedStyle(document.documentElement).getPropertyValue('--p1').trim();
   const c2=getComputedStyle(document.documentElement).getPropertyValue('--p2').trim();
   const t=track.center[Math.min(3,track.center.length-1)], s=track.center[0];
@@ -586,34 +620,66 @@ function overspeed(c){
   const k=1/(minR*M)-CAR.DF*9.8; if(k<=0) return 0;
   return Math.max(0, v-Math.sqrt(9.8*CAR.MU0/k)*0.95);
 }
-function aiScore(r){
+// 預測對手未來軌跡（每 0.1s 一點）：A＝維持目前搖桿指令的物理推演；B＝沿賽道中線、保持側向偏移的「幽靈」
+let oppPred=null;
+function buildOppPred(me,N){
+  const o=players[1-me.id], c0=o.car, A=[], B=[]; let c={...c0};
+  A.push({x:c.x,y:c.y,h:c.h});
+  for(let i=0;i<N;i++){ stepCar(c,o.stick.y,o.stick.x,0.1); A.push({x:c.x,y:c.y,h:c.h}); }
+  const cen=track.center, arc=track.arcLen, k=globalNearest(c0).idx, a=cen[Math.max(0,k-1)], b=cen[Math.min(cen.length-1,k+1)];
+  let tx=b.x-a.x, ty=b.y-a.y; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+  const off=(c0.x-cen[k].x)*(-ty)+(c0.y-cen[k].y)*tx, acc=clampNum(8*(1-c0.v/70),0,8);
+  for(let i=0;i<=N;i++){
+    const t=i*0.1, s=arc[k]+c0.v*t+0.5*acc*t*t; let j=k; while(j<cen.length-1&&arc[j]<s) j++;
+    const p=cen[j], q=cen[Math.min(cen.length-1,j+1)], pp=cen[Math.max(0,j-1)]; let ux=q.x-pp.x, uy=q.y-pp.y; const ul=Math.hypot(ux,uy)||1; ux/=ul; uy/=ul;
+    B.push({x:p.x-uy*off, y:p.y+ux*off, h:Math.atan2(uy,ux)});
+  }
+  return [A,B];
+}
+// 候選路徑與對手預測軌跡的碰撞罰分：車身(加安全邊距)重疊＝重罰；10 m 內＝依距離輕罰；0.05s 子取樣避免高速穿越
+function collisionCost(r,tOff){
+  if(!oppPred) return 0;
+  const fr=r.frames, base=Math.round(tOff*10), w=[0,0];
+  for(let i=1;i<fr.length;i++) for(let k=0;k<2;k++){
+    const P=oppPred[k], a=P[Math.min(base+i,P.length-1)], a0=P[Math.min(base+i-1,P.length-1)];
+    for(const u of [0.5,1]){
+      const me={x:fr[i-1].x+(fr[i].x-fr[i-1].x)*u, y:fr[i-1].y+(fr[i].y-fr[i-1].y)*u, h:fr[i].h}, op={x:a0.x+(a.x-a0.x)*u, y:a0.y+(a.y-a0.y)*u, h:a.h};
+      const d=dist(me,op); if(d>=6.5) continue; let cst=(6.5-d)*1.2;
+      const A=carBox(me), B=carBox(op); A.hl+=0.3; A.hw+=0.3; B.hl+=0.3; B.hw+=0.3;
+      if(obbHit(A,B)) cst+=100;
+      if(cst>w[k]) w[k]=cst;
+    }
+  }
+  return Math.max(w[0],w[1]*0.5)*DIFF[aiDifficulty].avoid;
+}
+function aiScore(r,tOff){
   if(r.ev){ r.pen=0; return r.sc=(r.ev.type==='finish' ? 1e6-r.ev.t*100 : -1e5); }
   const c=r.car, cen=track.center, i0=Math.max(0,c.idx-1), i1=Math.min(cen.length-1,c.idx+1);
   const tang=Math.atan2(cen[i1].y-cen[i0].y, cen[i1].x-cen[i0].x);
   const ang=Math.abs(((c.h-tang+Math.PI*3)%(Math.PI*2))-Math.PI);
   const ov=overspeed(c);
-  r.pen=c.nOut*30 + c.lat*0.6 + ang*5 + ov*ov*3;   // 每一步都累計罰分（不只終點）
+  r.pen=c.nOut*30 + c.lat*0.6 + ang*5 + ov*ov*3 + collisionCost(r,tOff);   // 每一步都累計罰分（含避撞）
   return r.sc=track.arcLen[c.idx]-r.pen;
 }
 const THR_F=[-1,-.5,0,.4,.7,1], STR_F=[-1,-.5,-.2,0,.2,.5,1], THR_S=[-1,0,.5,1], STR_S=[-1,-.35,0,.35,1];
-function expand(c,full){
+function expand(c,full,tOff){
   const out=[];
   for(const thr of full?THR_F:THR_S) for(const str of full?STR_F:STR_S){
-    const r=simulate(c,{thr,str},0.1,10,true); r.sc=aiScore(r); r.cmd={thr,str}; out.push(r);
+    const r=simulate(c,{thr,str},0.1,10,true); r.sc=aiScore(r,tOff||0); r.cmd={thr,str}; out.push(r);
   }
   return out.sort((a,b)=>b.sc-a.sc);
 }
-function deepValue(r,depth,beam){
+function deepValue(r,depth,beam,tOff){
   if(r.ev||depth<=0) return r.sc;
-  const kids=expand(r.car,false).slice(0,beam); let best=-Infinity;
-  for(const k of kids){ const v=deepValue(k,depth-1,beam); if(v>best) best=v; }
+  const kids=expand(r.car,false,tOff).slice(0,beam); let best=-Infinity;
+  for(const k of kids){ const v=deepValue(k,depth-1,beam,tOff+1); if(v>best) best=v; }
   return best-r.pen*0.7;
 }
 function aiDecide(p){
   if(phase!=='decide'||p.ready) return;
   const d=DIFF[aiDifficulty], c={...p.car}; c.lat=0;
-  const first=expand(c,true); let best=null,bv=-Infinity;
-  for(const r of first){ const v=deepValue(r,d.depth-1,d.beam); if(v>bv){bv=v;best=r;} }
+  oppPred=buildOppPred(p,d.depth*10); const first=expand(c,true,0); let best=null,bv=-Infinity;
+  for(const r of first){ const v=deepValue(r,d.depth-1,d.beam,1); if(v>bv){bv=v;best=r;} }
   let thr=best.cmd.thr, str=best.cmd.str;
   if(d.noise){ thr+=(Math.random()*2-1)*d.noise*1.5; str+=(Math.random()*2-1)*d.noise; }
   thr=clampNum(thr,-1,1); if(thr>0) thr*=d.cap; str=clampNum(str,-1,1);
@@ -778,7 +844,7 @@ document.getElementById('btnAi').onclick=()=>{ document.getElementById('diffBox'
 document.getElementById('btnStartAi').onclick=()=>{ mode='ai'; showGame(); };
 function bindSel(sel,fn){ document.querySelectorAll(sel).forEach(b=>b.onclick=()=>{ document.querySelectorAll(sel).forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); fn(b); }); }
 bindSel('#diffBox .diffBtn',b=>aiDifficulty=b.dataset.d);
-bindSel('#lengthRow .diffBtn',b=>trackKm=parseFloat(b.dataset.km));
+bindSel('#lengthRow .diffBtn',b=>{ useCustom=b.dataset.km==='custom'; if(!useCustom) trackKm=parseFloat(b.dataset.km); });
 document.getElementById('btnHome').onclick=goHome;
 document.getElementById('btnBackHome').onclick=goHome;
 document.getElementById('btnAgain').onclick=()=>{ document.getElementById('overlay').classList.remove('show'); initGame(); };
@@ -823,6 +889,147 @@ document.getElementById('btnReplay').onclick=startReplay;
 // 避免畫布的拖曳／縮放／touch preventDefault 吃掉重播列與結果視窗的操作
 ['replayBar','overlay'].forEach(id=>{ const el=document.getElementById(id);
   ['mousedown','touchstart','touchmove','touchend','wheel'].forEach(n=>el.addEventListener(n,e=>e.stopPropagation(),{passive:true})); });
+
+// ================= 賽道編輯器 =================
+let customTrack=null, useCustom=false;
+const ed={pts:[],hw:14,grid:2000,del:false,undo:[],scale:.35,ox:0,oy:0,center:[],res:null,drag:null};
+const $e=id=>document.getElementById(id), ecv=$e('ecv'), ectx=ecv.getContext('2d'), eWrap=$e('eWrap'), eStat=$e('eStat'), edScreen=$e('editorScreen');
+
+// 控制點 → Catmull-Rom 曲線 → 每 4 m 等距重取樣的中心線
+function sampleSpline(pts){
+  const n=pts.length; if(n<2) return [];
+  const e=[{x:2*pts[0].x-pts[1].x,y:2*pts[0].y-pts[1].y},...pts,{x:2*pts[n-1].x-pts[n-2].x,y:2*pts[n-1].y-pts[n-2].y}], dense=[{...pts[0]}];
+  for(let i=1;i<e.length-2;i++){ const m=Math.max(8,Math.ceil(dist(e[i],e[i+1])/2)); for(let k=1;k<=m;k++) dense.push(catmullRom(e[i-1],e[i],e[i+1],e[i+2],k/m)); }
+  const out=[dense[0]]; let acc=0, prev=dense[0];
+  for(let i=1;i<dense.length;i++){ let a=prev; const b=dense[i]; let d=dist(a,b);
+    while(acc+d>=4){ const t=(4-acc)/d; a={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t}; out.push(a); d=dist(a,b); acc=0; }
+    acc+=d; prev=b; }
+  if(dist(out[out.length-1],dense[dense.length-1])>0.5) out.push(dense[dense.length-1]);
+  return out;
+}
+function buildTrackFromCenter(center,HW){
+  const arcLen=[0]; for(let i=1;i<center.length;i++) arcLen.push(arcLen[i-1]+dist(center[i-1],center[i]));
+  const curvature=center.map((p,i)=>curvatureRadius(center[Math.max(0,i-4)],p,center[Math.min(center.length-1,i+4)]));
+  const left=[], right=[];
+  for(let i=0;i<center.length;i++){
+    const p0=center[Math.max(0,i-1)], p1=center[Math.min(center.length-1,i+1)]; let tx=p1.x-p0.x, ty=p1.y-p0.y; const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
+    left.push({x:center[i].x-ty*HW, y:center[i].y+tx*HW}); right.push({x:center[i].x+ty*HW, y:center[i].y-tx*HW});
+  }
+  const s0=center[0], s1=center[1]; let tx=s1.x-s0.x, ty=s1.y-s0.y; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl; const last=center.length-1;
+  return {center,left,right,polygon:left.concat(right.slice().reverse()),halfWidths:center.map(()=>HW),arcLen,curvature,
+    startGate:[left[0],right[0]], finishGate:[left[last],right[last]],
+    p1Start:{x:s0.x+tx*8+ty*2.5, y:s0.y+ty*8-tx*2.5}, p2Start:{x:s0.x+tx*8-ty*2.5, y:s0.y+ty*8+tx*2.5}};
+}
+function validateTrack(c,HW,grid){
+  if(c.length<30) return {err:'賽道太短（至少約 120 m）'};
+  const m=HW+5; for(const p of c) if(p.x<m||p.x>grid-m||p.y<m||p.y>grid-m) return {err:'賽道超出場地範圍'};
+  const t=buildTrackFromCenter(c,HW);
+  if(Math.min(...t.curvature.filter(isFinite))<HW+1) return {err:'有彎道太急（半徑小於賽道半寬），請放緩該處或調窄賽道'};
+  const gap=Math.ceil(HW*6/4), lim=HW*2+4;
+  for(let i=0;i<c.length;i+=2) for(let j=i+gap;j<c.length;j++) if(dist(c[i],c[j])<lim) return {err:'賽道太靠近／穿過自己，請拉開間距'};
+  if(polylineSelfIntersects(t.left)||polylineSelfIntersects(t.right)) return {err:'賽道邊界自我相交'};
+  return {track:t};
+}
+function buildCustom(){ GRID=customTrack.grid; return buildTrackFromCenter(sampleSpline(customTrack.pts),customTrack.hw); }
+
+function eToPx(x,y){ return {x:ed.ox+x*ed.scale,y:ed.oy+y*ed.scale}; }
+function eFromPx(x,y){ return {x:(x-ed.ox)/ed.scale,y:(y-ed.oy)/ed.scale}; }
+function eResize(){ ecv.width=eWrap.clientWidth; ecv.height=eWrap.clientHeight; eDraw(); }
+function eFit(){ const W=eWrap.clientWidth,H=eWrap.clientHeight; ed.scale=Math.min(W,H)/ed.grid*0.94; ed.ox=(W-ed.grid*ed.scale)/2; ed.oy=(H-ed.grid*ed.scale)/2; eDraw(); }
+function pushUndo(){ ed.undo.push(JSON.stringify(ed.pts)); if(ed.undo.length>60) ed.undo.shift(); }
+function setStat(t,cls){ eStat.textContent=t; eStat.className=cls||''; }
+function clampPt(g){ const m=ed.hw+6; return {x:clampNum(g.x,m,ed.grid-m), y:clampNum(g.y,m,ed.grid-m)}; }
+function eSync(){ $e('eHW').value=ed.hw; $e('eHWv').textContent=ed.hw; $e('eGridR').value=ed.grid; $e('eGridV').textContent=ed.grid; }
+function eRecalc(){
+  ed.pts=ed.pts.map(clampPt); ed.center=sampleSpline(ed.pts); ed.res=null;
+  if(ed.pts.length<2) setStat('點擊場地新增控制點（第 1 點＝起點 S，最後一點＝終點 F）｜拖曳移動｜點擊賽道線可插入｜右鍵／刪點模式刪除','');
+  else { ed.res=validateTrack(ed.center,ed.hw,ed.grid);
+    if(ed.res.err) setStat('⚠ '+ed.res.err,'bad');
+    else setStat(`✅ 賽道有效｜長 ${(ed.res.track.arcLen[ed.res.track.arcLen.length-1]/1000).toFixed(2)} km｜寬 ${ed.hw} m｜${ed.pts.length} 個控制點`,'good'); }
+  try{ localStorage.setItem('f1_ctrack',JSON.stringify({pts:ed.pts,hw:ed.hw,grid:ed.grid})); }catch(e){}
+  eDraw();
+}
+function eDraw(){
+  const W=ecv.width, H=ecv.height, s=ed.scale, P=eToPx, c=ed.center; ectx.clearRect(0,0,W,H);
+  ectx.strokeStyle='rgba(255,255,255,.1)'; ectx.lineWidth=1;
+  for(let g=0;g<=ed.grid;g+=100){ const a=P(g,0),b=P(g,ed.grid),l=P(0,g),r=P(ed.grid,g); ectx.beginPath(); ectx.moveTo(a.x,a.y); ectx.lineTo(b.x,b.y); ectx.moveTo(l.x,l.y); ectx.lineTo(r.x,r.y); ectx.stroke(); }
+  const o=P(0,0); ectx.strokeStyle='rgba(255,255,255,.4)'; ectx.strokeRect(o.x,o.y,ed.grid*s,ed.grid*s);
+  const path=(arr)=>{ ectx.beginPath(); arr.forEach((p,i)=>{ const q=P(p.x,p.y); i?ectx.lineTo(q.x,q.y):ectx.moveTo(q.x,q.y); }); };
+  if(c.length>1){
+    path(c); ectx.lineJoin='round'; ectx.lineCap='butt'; ectx.lineWidth=ed.hw*2*s; ectx.strokeStyle=(ed.res&&ed.res.err)?'rgba(255,89,100,.4)':'rgba(60,90,70,.65)'; ectx.stroke();
+    if(ed.res&&ed.res.track){ [ed.res.track.left,ed.res.track.right].forEach(l=>{ path(l); ectx.lineWidth=2; ectx.strokeStyle='#e8c15a'; ectx.stroke(); });
+      [ed.res.track.startGate,ed.res.track.finishGate].forEach((g,i)=>{ path(g); ectx.lineWidth=3; ectx.strokeStyle=i?'#ff5d5d':'#5ad1ff'; ectx.stroke(); }); }
+    path(c); ectx.lineWidth=1; ectx.strokeStyle='rgba(255,255,255,.5)'; ectx.setLineDash([6,5]); ectx.stroke(); ectx.setLineDash([]);
+  }
+  ectx.font='bold 11px sans-serif'; ectx.textAlign='center'; ectx.textBaseline='middle';
+  ed.pts.forEach((p,i)=>{ const q=P(p.x,p.y), n=ed.pts.length;
+    ectx.beginPath(); ectx.arc(q.x,q.y,9,0,7); ectx.fillStyle=i===0?'#4cd964':(i===n-1&&n>1)?'#ff5964':'#eef2f8'; ectx.fill(); ectx.strokeStyle='#0c1119'; ectx.lineWidth=2; ectx.stroke();
+    ectx.fillStyle='#0c1119'; ectx.fillText(i===0?'S':(i===n-1&&n>1)?'F':i+1,q.x,q.y); });
+}
+function ePick(mx,my){ for(let i=ed.pts.length-1;i>=0;i--){ const q=eToPx(ed.pts[i].x,ed.pts[i].y); if(Math.hypot(q.x-mx,q.y-my)<14) return i; } return -1; }
+function nearCurve(mx,my){
+  const c=ed.center; if(c.length<2||ed.pts.length<2) return null; let bk=-1,bd=1e9;
+  c.forEach((p,k)=>{ const q=eToPx(p.x,p.y), d=Math.hypot(q.x-mx,q.y-my); if(d<bd){bd=d;bk=k;} });
+  if(bd>14) return null;
+  const p=c[bk]; let bi=0,be=1e9;
+  for(let i=0;i<ed.pts.length-1;i++){ const x=dist(p,ed.pts[i])+dist(p,ed.pts[i+1])-dist(ed.pts[i],ed.pts[i+1]); if(x<be){be=x;bi=i;} }
+  return {i:bi,p:{x:p.x,y:p.y}};
+}
+const ePos=e=>{ const r=ecv.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
+ecv.addEventListener('contextmenu',e=>e.preventDefault());
+ecv.addEventListener('pointerdown',e=>{
+  const m=ePos(e), hit=ePick(m.x,m.y); ecv.setPointerCapture(e.pointerId);
+  if(hit>=0&&(ed.del||e.button===2)){ pushUndo(); ed.pts.splice(hit,1); eRecalc(); return; }
+  if(e.button===2) return;
+  if(hit>=0){ pushUndo(); ed.drag={t:'pt',i:hit}; return; }
+  const nc=ed.del?null:nearCurve(m.x,m.y);
+  if(nc){ pushUndo(); ed.pts.splice(nc.i+1,0,nc.p); ed.drag={t:'pt',i:nc.i+1}; eRecalc(); return; }
+  ed.drag={t:'pan',sx:m.x,sy:m.y,ox:ed.ox,oy:ed.oy,moved:false};
+});
+ecv.addEventListener('pointermove',e=>{
+  const d=ed.drag; if(!d) return; const m=ePos(e);
+  if(d.t==='pt'){ ed.pts[d.i]=clampPt(eFromPx(m.x,m.y)); ed.center=sampleSpline(ed.pts); ed.res=null; eDraw(); }
+  else { if(Math.hypot(m.x-d.sx,m.y-d.sy)>4) d.moved=true; if(d.moved){ ed.ox=d.ox+m.x-d.sx; ed.oy=d.oy+m.y-d.sy; eDraw(); } }
+});
+ecv.addEventListener('pointerup',e=>{
+  const d=ed.drag; ed.drag=null; if(!d) return;
+  if(d.t==='pt') eRecalc();
+  else if(!d.moved&&!ed.del){ const m=ePos(e); pushUndo(); ed.pts.push(clampPt(eFromPx(m.x,m.y))); eRecalc(); }
+});
+ecv.addEventListener('pointercancel',()=>{ ed.drag=null; eRecalc(); });
+function eZoom(mx,my,f){ const g=eFromPx(mx,my); ed.scale=clampNum(ed.scale*f,0.04,10); const a=eToPx(g.x,g.y); ed.ox+=mx-a.x; ed.oy+=my-a.y; eDraw(); }
+ecv.addEventListener('wheel',e=>{ e.preventDefault(); const m=ePos(e); eZoom(m.x,m.y,e.deltaY<0?1.12:0.89); },{passive:false});
+$e('eZin').onclick=()=>eZoom(ecv.width/2,ecv.height/2,1.3);
+$e('eZout').onclick=()=>eZoom(ecv.width/2,ecv.height/2,0.77);
+$e('eFit').onclick=eFit;
+$e('eDel').onclick=function(){ ed.del=!ed.del; this.classList.toggle('on',ed.del); };
+$e('eUndo').onclick=()=>{ if(ed.undo.length){ ed.pts=JSON.parse(ed.undo.pop()); eRecalc(); } };
+$e('eClear').onclick=()=>{ if(ed.pts.length){ pushUndo(); ed.pts=[]; eRecalc(); } };
+$e('eRev').onclick=()=>{ pushUndo(); ed.pts.reverse(); eRecalc(); };
+$e('eRand').onclick=()=>{ pushUndo(); const t=generateTrack(); ed.grid=clampNum(Math.round(GRID/100)*100,600,4000); ed.hw=14;
+  ed.pts=t.center.filter((p,i)=>i%10===0).map(p=>({x:p.x,y:p.y})); const l=t.center[t.center.length-1]; if(dist(ed.pts[ed.pts.length-1],l)>20) ed.pts.push({x:l.x,y:l.y}); eSync(); eRecalc(); eFit(); };
+$e('eHW').oninput=function(){ ed.hw=+this.value; $e('eHWv').textContent=ed.hw; eRecalc(); };
+$e('eGridR').oninput=function(){ ed.grid=+this.value; $e('eGridV').textContent=ed.grid; eRecalc(); eFit(); };
+function commitCustom(){
+  if(!ed.res||!ed.res.track) return false;
+  customTrack={pts:ed.pts.map(p=>({x:p.x,y:p.y})),hw:ed.hw,grid:ed.grid};
+  const b=$e('btnCustomSel'); b.style.display=''; b.textContent='自訂 '+(ed.res.track.arcLen[ed.res.track.arcLen.length-1]/1000).toFixed(1)+' km'; return true;
+}
+function eLeave(){ edScreen.style.display='none'; homeScreen.style.display='flex'; }
+$e('eUse').onclick=()=>{ if(!commitCustom()){ setStat('⚠ 請先做出有效賽道（至少 2 個控制點且無紅色警告）','bad'); return; }
+  useCustom=true; document.querySelectorAll('#lengthRow .diffBtn').forEach(x=>x.classList.toggle('sel',x.id==='btnCustomSel')); eLeave(); };
+$e('eHome').onclick=()=>{ commitCustom(); eLeave(); };
+$e('btnEditor').onclick=()=>{ homeScreen.style.display='none'; edScreen.style.display='flex'; eSync(); requestAnimationFrame(()=>{ eResize(); eFit(); eRecalc(); }); };
+window.addEventListener('resize',()=>{ if(edScreen.style.display==='flex') eResize(); });
+const ioBox=$e('ioBox'), ioText=$e('ioText');
+$e('eIO').onclick=()=>{ ioText.value=JSON.stringify({pts:ed.pts.map(p=>({x:Math.round(p.x),y:Math.round(p.y)})),hw:ed.hw,grid:ed.grid}); ioBox.classList.add('show'); };
+$e('ioClose').onclick=()=>ioBox.classList.remove('show');
+$e('ioCopy').onclick=()=>{ ioText.select(); try{ navigator.clipboard.writeText(ioText.value); }catch(e){ document.execCommand('copy'); } };
+$e('ioApply').onclick=()=>{ try{ const o=JSON.parse(ioText.value); if(!Array.isArray(o.pts)||o.pts.some(p=>!isFinite(p.x)||!isFinite(p.y))) throw 0;
+  pushUndo(); ed.hw=clampNum(+o.hw||14,10,24); ed.grid=clampNum(+o.grid||2000,600,4000); ed.pts=o.pts.map(p=>({x:+p.x,y:+p.y})); eSync(); eRecalc(); eFit(); ioBox.classList.remove('show'); }catch(e){ setStat('⚠ 匯入格式錯誤','bad'); ioBox.classList.remove('show'); } };
+['mousedown','touchstart','wheel','pointerdown'].forEach(n=>ioBox.addEventListener(n,e=>e.stopPropagation(),{passive:true}));
+// 還原上次編輯的賽道
+try{ const o=JSON.parse(localStorage.getItem('f1_ctrack')||'null'); if(o&&Array.isArray(o.pts)&&o.pts.length>=2){ ed.pts=o.pts; ed.hw=o.hw||14; ed.grid=o.grid||2000; ed.res=validateTrack(sampleSpline(ed.pts),ed.hw,ed.grid); commitCustom(); } }catch(e){}
 
 makeStick(0); makeStick(1);
 })();
