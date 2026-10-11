@@ -52,6 +52,7 @@
   .info .mut{color:var(--muted);}
   .okBtn{margin-top:3px;padding:8px 14px;border-radius:8px;border:2px solid var(--c);background:transparent;color:var(--text);cursor:pointer;font-weight:bold;}
   .okBtn:disabled{opacity:.5;cursor:default;}
+  .gearBtn.rev{background:var(--c);color:#0c1119;}
   @media (max-width:700px){
     #homeScreen{justify-content:flex-start;padding-top:32px;}
     #homeScreen h1{font-size:1.5em;}
@@ -67,6 +68,11 @@
   .nameRow{display:flex;align-items:center;gap:6px;}
   .wheel{width:40px;height:40px;flex:none;}
   .wheel svg{width:100%;height:100%;display:block;}
+  #btnInsert{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:none;flex-direction:column;align-items:center;gap:2px;padding:16px 38px;font-size:1.3em;font-weight:bold;border-radius:16px;border:3px solid var(--accent);background:rgba(26,34,51,.93);color:var(--accent);cursor:pointer;box-shadow:0 4px 18px #000a;z-index:5;user-select:none;touch-action:manipulation;font-family:inherit;}
+  #btnInsert small{font-size:.58em;font-weight:normal;color:var(--text);opacity:.8;}
+  #btnInsert:active{background:var(--accent);color:#0c1119;}
+  #btnInsert:active small{color:#0c1119;}
+  #btnInsert.dim{opacity:.45;border-color:var(--muted);color:var(--muted);}
   #replayBar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:none;align-items:center;gap:8px;background:rgba(26,34,51,.94);padding:8px 12px;border-radius:12px;width:min(580px,94%);border:1px solid #3a4864;}
   #replayBar.show{display:flex;}
   #replayBar input[type=range]{flex:1;min-width:0;accent-color:var(--accent);}
@@ -82,31 +88,51 @@
   #ioBox{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);} #ioBox.show{display:flex;}
   #ioBox>div{background:var(--panel);padding:16px;border-radius:12px;width:min(540px,92%);display:flex;flex-direction:column;gap:8px;}
   #ioBox textarea{height:170px;background:#10172a;color:var(--text);border:1px solid #3a4864;border-radius:6px;font-size:12px;}
+  #board{position:absolute;left:8px;top:8px;background:rgba(26,34,51,.85);padding:6px 10px;border-radius:8px;font-size:.8em;line-height:1.55;display:none;pointer-events:none;font-variant-numeric:tabular-nums;}
+  #board.big{font-size:10.5px;line-height:1.3;padding:5px 8px;max-height:calc(100% - 16px);overflow:hidden;}
+  #overlayMsg{max-height:48vh;overflow:auto;text-align:left;line-height:1.5;font-size:.92em;}
+  #lights{position:absolute;left:50%;top:14px;transform:translateX(-50%);display:none;flex-direction:column;align-items:center;gap:6px;background:rgba(10,14,22,.82);padding:10px 18px;border-radius:14px;border:1px solid #3a4864;pointer-events:none;z-index:5;}
+  #lights.show{display:flex;}
+  #lightRow{display:flex;gap:10px;} #lightRow i{display:block;width:30px;height:30px;border-radius:50%;background:#2a1216;border:2px solid #444;transition:background .1s,box-shadow .1s;}
+  #lightRow i.on{background:#ff2d2d;box-shadow:0 0 14px #ff2d2d;border-color:#ff7b7b;}
+  #lightMsg{font-weight:bold;letter-spacing:2px;font-size:.95em;}
+  #lights.go #lightMsg{color:#4cd964;font-size:1.3em;}
 </style>
 </head>
 <body>
 
 <div id="homeScreen">
   <h1>🏎️ F1 物理賽車對戰</h1>
-  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 1 秒，雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑 1 秒物理模擬。先衝過終點線者勝，撞牆即出局；賽車之間會真實碰撞，賽後可重播整場。</p>
+  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 0.5 或 1.0 秒（可切換），雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑一步物理模擬；模擬途中可按大按鈕「插入決策」，在下一個 0.1 秒刻度立即停下、重新決策，不必等整步跑完。AI 以 0.1 秒為單位規劃操作，閃避更靈敏；支援倒車檔（按「D／R」鍵切換，車速低於 10 km/h 才會倒車）。車輛採用動態自行車模型：Pacejka 輪胎（側偏角產生側向力）、縱向載荷轉移、隨速度平方增加的下壓力、後輪驅動與摩擦橢圓，所以會有轉向不足、轉向過度與甩尾。四輪全出白線＝違反賽道界限（F1 規則：前 3 次警告，之後每次罰時 5 秒；場外護欄會把車帶回與賽道平行），造成碰撞者罰時（後車追尾或切入撞人：輕撞 5 秒、重撞 10 秒），最終以含罰時的成績決勝負；賽車之間會真實碰撞，賽後可重播整場。</p>
 
   <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
     <div>
       <div style="color:var(--muted);margin-bottom:6px;text-align:center;">賽道長度（起點 → 終點）</div>
       <div class="diffRow" id="lengthRow"><button class="diffBtn" data-km="1.5">短 1.5 km</button><button class="diffBtn sel" data-km="3">標準 3 km</button><button class="diffBtn" data-km="4.5">長 4.5 km</button><button class="diffBtn" data-km="6">F1 6 km</button><button class="diffBtn" data-km="custom" id="btnCustomSel" style="display:none">自訂賽道</button></div>
     </div>
+    <div><div style="color:var(--muted);margin-bottom:6px;text-align:center;">每步時間</div><div class="diffRow" id="stepRow"><button class="diffBtn" data-t="0.5">0.5 秒</button><button class="diffBtn sel" data-t="1">1.0 秒</button></div></div>
   </div>
 
   <button class="bigBtn" id="btnEditor">✏️ 賽道編輯器（自訂賽道）</button>
   <button class="bigBtn" id="btnPvp">👥 雙人對戰（同機雙搖桿）</button>
   <button class="bigBtn" id="btnAi">🤖 人機對戰</button>
+  <button class="bigBtn" id="btnGrid">🏁 22 車大獎賽（起跑格）</button>
+  <div id="gridBox" style="display:none;flex-direction:column;gap:12px;align-items:center;">
+    <div style="color:var(--muted);text-align:center;max-width:420px;line-height:1.5">你 + 21 部 AI 共 22 部車，F1 交錯式起跑格，五燈熄滅後起跑。AI 會偵察後方車輛、選邊超車、防守、保持安全車距。</div>
+    <div style="color:var(--muted)">AI 難度</div>
+    <div class="diffRow" id="gDiffRow"><button class="diffBtn" data-d="easy">簡單</button><button class="diffBtn sel" data-d="medium">中等</button><button class="diffBtn" data-d="hard">困難</button></div>
+    <div style="color:var(--muted)">你的起跑位置</div>
+    <div class="diffRow" id="gPosRow"><button class="diffBtn" data-g="pole">竿位 P1</button><button class="diffBtn" data-g="mid">中段 P11</button><button class="diffBtn" data-g="back">尾段 P22</button><button class="diffBtn sel" data-g="rand">隨機</button></div>
+    <button class="bigBtn" id="btnStartGrid" style="margin-top:6px;">🚦 開始 22 車大獎賽</button>
+  </div>
   <div id="diffBox">
     <div style="color:var(--muted)">選擇 AI 難度</div>
-    <div class="diffRow">
+    <div class="diffRow" id="aiDiffRow">
       <button class="diffBtn" data-d="easy">簡單</button>
       <button class="diffBtn sel" data-d="medium">中等</button>
       <button class="diffBtn" data-d="hard">困難</button>
     </div>
+    <div style="color:var(--muted)">AI 對手數量</div><div class="diffRow" id="aiCountRow"><button class="diffBtn sel" data-n="1">1 個</button><button class="diffBtn" data-n="2">2 個</button><button class="diffBtn" data-n="3">3 個</button></div>
     <button class="bigBtn" id="btnStartAi" style="margin-top:6px;">開始遊戲</button>
   </div>
 </div>
@@ -116,8 +142,9 @@
     <div class="badge" id="stepBadge">步驟 1</div>
     <div class="badge" id="timeBadge">0 s</div>
     <div class="badge" id="phaseBadge">決策中</div>
-    <div id="hint" style="font-size:.8em;color:var(--muted)">搖桿：上=加速 下=煞車 左右=轉向｜鍵盤 P1：WASD＋空白　P2：方向鍵＋Enter</div>
+    <div id="hint" style="font-size:.8em;color:var(--muted)">搖桿：上=加速 下=煞車 左右=轉向｜鍵盤 P1：WASD＋空白（R＝前進／倒車）　P2：方向鍵＋Enter（/＝前進／倒車）｜預覽車影：白＝穩定、橙＝側偏、紅＝打滑／出界｜模擬中按「⚡插入決策」（或空白／Enter）可在下一個 0.1s 刻度提前停下重新決策</div>
     <div class="spacer"></div>
+    <button class="ctrlBtn" id="btnStepT">⏱ 1.0s</button>
     <button class="ctrlBtn" id="btnFollow">🎥 跟車</button>
     <button class="ctrlBtn" id="btnZoomOut">－</button>
     <button class="ctrlBtn" id="btnZoomIn">＋</button>
@@ -126,25 +153,27 @@
   </div>
   <div id="timerWrap"><div id="timerBar"></div></div>
   <div id="canvasWrap">
-    <canvas id="cv"></canvas>
+    <canvas id="cv"></canvas><div id="board"></div>
+    <div id="lights"><div id="lightRow"><i></i><i></i><i></i><i></i><i></i></div><div id="lightMsg">🚦 起跑準備</div></div>
     <div id="overlay"><div id="overlayBox">
       <h2 id="overlayTitle"></h2><p id="overlayMsg"></p>
       <button class="bigBtn" id="btnReplay">🔁 重播</button>
       <button class="bigBtn" id="btnAgain">再來一局（新賽道）</button>
       <button class="bigBtn" id="btnBackHome">返回主頁</button>
     </div></div>
+    <button id="btnInsert">⚡ 插入決策 <small>空白鍵 / Enter</small></button>
     <div id="replayBar"><button class="ctrlBtn" id="rpPlay">⏸</button><input type="range" id="rpSlider" min="0" max="1000" value="0"><span id="rpTime">0.0 / 0 s</span><button class="ctrlBtn" id="rpSpeed">1×</button><button class="ctrlBtn" id="rpExit">✕ 結束</button></div>
   </div>
   <div id="controls">
     <div class="pPanel" id="panel0" style="--c:var(--p1)">
       <div class="stick" id="stick0"><span class="u">加速</span><span class="d">煞車</span><span class="l">左</span><span class="r">右</span><div class="knob"></div></div>
       <div class="info"><div class="nameRow"><div class="wheel" id="wheel0"></div><div class="name">玩家1</div></div><div class="spd"><span id="spd0">0</span> <small>km/h</small></div>
-        <div class="mut" id="rd0"></div><div class="mut" id="pv0"></div><button class="okBtn" id="ok0">確認 OK</button></div>
+        <div class="mut" id="rd0"></div><div class="mut" id="pv0"></div><div class="mut" id="tl0"></div><div style="display:flex;gap:6px"><button class="okBtn gearBtn" id="gear0">D 前進</button><button class="okBtn" id="ok0">確認 OK</button></div></div>
     </div>
     <div class="pPanel right" id="panel1" style="--c:var(--p2)">
       <div class="stick" id="stick1"><span class="u">加速</span><span class="d">煞車</span><span class="l">左</span><span class="r">右</span><div class="knob"></div></div>
       <div class="info" style="align-items:flex-end"><div class="nameRow"><div class="wheel" id="wheel1"></div><div class="name" id="name1">玩家2</div></div><div class="spd"><span id="spd1">0</span> <small>km/h</small></div>
-        <div class="mut" id="rd1"></div><div class="mut" id="pv1"></div><button class="okBtn" id="ok1">確認 OK</button></div>
+        <div class="mut" id="rd1"></div><div class="mut" id="pv1"></div><div class="mut" id="tl1"></div><div style="display:flex;gap:6px"><button class="okBtn gearBtn" id="gear1">D 前進</button><button class="okBtn" id="ok1">確認 OK</button></div></div>
     </div>
   </div>
 </div>
@@ -179,22 +208,34 @@ let GRID = 1200;           // 場地邊長（米，由賽道長度自動決定�
 let trackKm = 3;
 let mode = 'pvp';
 let aiDifficulty = 'medium';
+let nAI = 1;               // AI 對手數量（1–3；22 車模式為 21）
+let gridMode = false, gridPos = 'rand', gridToken = 0, aiTok = 0;
 
 const M = 1;               // 1 unit = 1 米
 const DECIDE_MS = 8000;    // 每步最長決策時間
-const DT = 0.02, SUB = 50; // 每步 1 秒 = 50 個 0.02s 物理子步
-const DIFF = {
-  easy:   {depth:2, beam:2, noise:0.35, cap:0.75, avoid:0.4},
-  medium: {depth:3, beam:3, noise:0.07, cap:1, avoid:0.6},
-  hard:   {depth:4, beam:3, noise:0,    cap:1, avoid:0.8}
+const DT = 0.02; let STEP_T = 1, SUB = 50, simDur = 1, simClock = 0; // 每步 STEP_T 秒（0.5 或 1.0）= SUB 個 0.02s 物理子步
+const DIFF = {   // horizon＝前瞻秒數；W＝beam 寬度；avoid＝避撞權重
+  easy:   {horizon:2, W:6,  noise:0.15,  cap:0.75, avoid:0.5, atk:0,   safe:0.3},
+  medium: {horizon:3, W:14, noise:0.04, cap:1, avoid:1, atk:0.6, safe:0.7},
+  hard:   {horizon:6, W:30, noise:0,    cap:1, avoid:1.3, atk:1,   safe:1}
 };
+const AI_FINE=0.1;   // AI 決策解析度：每 0.1 秒一個操作（一步內可變化多次）
+// 取得某指令在第 i 個 0.1s 格的操作（AI 指令帶 seq 序列；人類指令是定值）
+function cmdAt(cmd,i){ return cmd&&cmd.seq?cmd.seq[Math.min(Math.max(0,i),cmd.seq.length-1)]:cmd; }
+DIFF.easy.def=0; DIFF.medium.def=1.5; DIFF.hard.def=3;   // 防守強度
 
 // F1 風格車輛參數（SI 單位：m, s）
-const CAR = {L:3.6, PWR:390, AMAX:13, BMAX:42, DRAG:0.0009, MU0:1.6, DF:0.0005, SCRUB:0.25};
+// 動態自行車模型（dynamic bicycle model）參數（SI 單位）
+// A／B＝重心到前／後軸距離；M 質量；IZ 偏航轉動慣量；HCG 重心高度（縱向載荷轉移）
+// FDF＝下壓力前軸分配；BB＝煞車前軸分配；MUR＝後輪相對前輪的抓地係數（>1＝輕微轉向不足）
+// PB/PC/PE＝Pacejka Magic Formula 係數（峰值側偏角約 8°，滑動後側向力仍保有約 89%（較寬容））
+const CAR = {L:3.6, A:1.94, B:1.66, M:800, IZ:1100, HCG:0.3, PWR:780, AMAX:12, BMAX:42, BB:0.60, FDF:0.41, DRAG:0.0009, MU0:1.6, DF:0.0005, MUR:1.06, PB:18, PC:1.3, PE:-0.5, STR_RATE:7, RACC:6, DMAX:0.4, VS:30};
+CAR.KD=CAR.M*9.8*CAR.DF/CAR.MU0;   // 下壓力係數 N/(m/s)²（總抓地力 μ(mg+KD·v²) 與舊模型一致）
+const steerGain=v=>CAR.DMAX/(1+(v/CAR.VS)*(v/CAR.VS));   // 方向盤全舵對應的前輪轉角（rad），高速時縮小
 
 let track=null, players=[], step=0, phase='idle', deadline=0, simStart=0, gameOver=false, follow=false, running=false;
 let scale=6, offsetX=40, offsetY=40;
-let history=[], hitMarks=[], curHits=[], replay=null, lastFrame=0;
+let history=[], hitMarks=[], curHits=[], curViols=[], replay=null, lastFrame=0;
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d'), wrap=document.getElementById('canvasWrap');
 function resizeCanvas(){ cv.width=wrap.clientWidth; cv.height=wrap.clientHeight; draw(); }
@@ -393,25 +434,56 @@ function globalNearest(pt){
 }
 
 // ---------- 物理模型 ----------
-// c: {x,y (unit), h (rad), v (m/s), ts (油門致動器 -1..1), ss (轉向致動器 -1..1)}
-// 油門/轉向帶有致動器速率限制；動力受功率限制；抓地力＝基礎＋下壓力(∝v²)；
-// 縱向與橫向加速度共用摩擦圓；轉向過度時進入轉向不足（轉彎能力封頂並損失速度）
+// c: {x,y (重心), h (車頭角), v (縱向速度 vx), vy (側向速度), yr (偏航角速度), ts (油門致動器 -1..1), ss (轉向致動器 -1..1)}
+// 動態自行車模型：前後軸各一個輪胎（Pacejka 側向力，側偏角 α 決定力量）、縱向載荷轉移、下壓力隨 v² 增加並前後分配、
+// 後輪驅動／前後煞車分配、摩擦橢圓（縱向用掉的抓地力會減少側向力 → 煞車轉向不足、出彎給油過多會推尾）。
+// 有真實偏航慣量，所以會有轉向不足、轉向過度、甩尾。速度很低（<≈7 m/s）時混入運動學模型以避免輪胎模型在零速的奇異性。
+function pac(a){ const x=CAR.PB*a; return Math.sin(CAR.PC*Math.atan(x-CAR.PE*(x-Math.atan(x)))); }
 function stepCar(c, thr, str, dt){
-  c.ts += clampNum(thr-c.ts, -6*dt, 6*dt);
-  c.ss += clampNum(str-c.ss, -3*dt, 3*dt);
-  const no=c.nOut||0, v=c.v, grip=9.8*(CAR.MU0+CAR.DF*v*v)*(1-0.15*no); // 每個輪越線：抓地力 -15%、額外阻力
-  let aL = c.ts>=0 ? c.ts*Math.min(CAR.AMAX, CAR.PWR/Math.max(v,5)) : c.ts*CAR.BMAX;
-  aL = clampNum(aL,-grip,grip);
-  const latCap = Math.sqrt(Math.max(0, grip*grip-aL*aL));
-  const delta = c.ss*0.4/(1+(v/22)*(v/22));
-  const tn = Math.tan(delta);
-  const aDes = v*v/CAR.L*tn;
-  let yaw = v/CAR.L*tn, slip=0;
-  if(Math.abs(aDes)>latCap){ yaw=Math.sign(aDes)*latCap/Math.max(v,0.1); slip=Math.abs(aDes)-latCap; }
-  c.slip=slip; c.aL=aL;
-  c.v=Math.max(0, v+(aL-CAR.DRAG*v*v-slip*CAR.SCRUB-(v>0?3*no:0))*dt);
-  c.h+=yaw*dt;
-  c.x+=Math.cos(c.h)*c.v*dt/M; c.y+=Math.sin(c.h)*c.v*dt/M;
+  const up=thr>c.ts, rt=up?(c.ts<0?8:5):(thr<0?12:10);   // 油門慢踩快收；煞車快踩、較慢釋放
+  c.ts += clampNum(thr-c.ts, -rt*dt, rt*dt);
+  c.ss += clampNum(str-c.ss, -CAR.STR_RATE*dt, CAR.STR_RATE*dt);
+  const nsub=Math.max(1,Math.ceil(dt/0.007)), h=dt/nsub;   // 輪胎剛度大，內部細分子步以保持數值穩定
+  const M=CAR.M, A=CAR.A, B=CAR.B, L=CAR.L, ts=c.ts;
+  const drf=Math.abs(c.v)>35?(c.dr||0):0, gk=(c.gs===undefined?1:c.gs)*(1-0.2*Math.min(1,c.tw||0));   // 尾流、路面與輪胎磨耗
+  const muF=CAR.MU0*gk, muR=muF*CAR.MUR, rrS=c.rr||0, kd=CAR.KD*(1-1.2*drf), dk=CAR.DRAG*M*(1-drf);
+  const Wf=M*9.8*B/L, Wr=M*9.8*A/L;
+  let vx=c.v, vy=c.vy||0, r=c.yr||0, x=c.x, y=c.y, hd=c.h, ax=c.ax||0, slipMax=0, use=0, axl=0;
+  for(let k=0;k<nsub;k++){
+    const sp=Math.hypot(vx,vy), sg=Math.max(-1,Math.min(1,vx/1.5)), delta=c.ss*steerGain(sp);
+    const Fd=kd*sp*sp, dFz=M*ax*CAR.HCG/L;   // 加速→後軸加載，煞車→前軸加載
+    const Fzf=Math.max(300,Wf+CAR.FDF*Fd-dFz), Fzr=Math.max(300,Wr+(1-CAR.FDF)*Fd+dFz), capF=muF*Fzf, capR=muR*Fzr;
+    const rev=c.rev&&vx<3;   // 倒車檔：車速 < 3 m/s 才有效
+    const den=Math.max(Math.abs(vx),4), sgn=vx>=0?1:-1, ks=Math.min(1,sp/3);   // ks：輪胎要有滾動速度才有側向力
+    const af=Math.atan2(vy+A*r,den)-delta*sgn, ar=Math.atan2(vy-B*r,den);
+    const pf=-ks*pac(af), pr=-ks*pac(ar);   // 正規化側向力（-1..1）
+    let Fxf=0, Fxr=0;
+    if(ts>=0){ if(rev) Fxr=vx>-12?-ts*M*CAR.RACC:0; else if(!c.rev) Fxr=ts*M*Math.min(CAR.AMAX, CAR.PWR/Math.max(vx,5)); }   // 後輪驅動，功率限制；倒車 6 m/s²、最高約 43 km/h
+    else { const Fb=-ts*M*CAR.BMAX; Fxf=-sg*Fb*CAR.BB; Fxr=-sg*Fb*(1-CAR.BB); }
+    if(ts<0.05) Fxr-=sg*1.5*M*Math.min(1,sp/10);   // 鬆油門的引擎煞車
+    // 行車輔助（牽引力控制／防鎖死）：後軸的縱向力不能吃掉後軸需要的側向抓地力 → 不會因給油或煞車過猛而突然推尾甩尾；
+    // 前軸允許飽和（只會轉向不足、車頭推出去），這是比較安全、也比較好控制的失衡方向
+    const limR=capR*0.95*Math.sqrt(Math.max(0.04,1-pr*pr));
+    Fxf=clampNum(Fxf,-capF,capF); Fxr=clampNum(Fxr,-limR,limR);
+    const uf=Fxf/capF, ur=Fxr/capR;
+    const Fyf=capF*pf*Math.sqrt(Math.max(0,1-0.7*uf*uf)), Fyr=capR*pr*Math.sqrt(Math.max(0,1-0.7*ur*ur));
+    const cd=Math.cos(delta), sd=Math.sin(delta);
+    const rf=(0.15+rrS*(0.5+Math.min(1,sp/40)))*M*Math.min(1,sp/0.5)/Math.max(sp,1e-3);   // 滾動阻力＋路面（草地／碎石）阻力
+    const Fyfb=Fyf*cd+Fxf*sd;
+    axl=(Fxf*cd-Fyf*sd+Fxr-dk*sp*vx-rf*vx)/M;
+    const ayl=(Fyfb+Fyr-dk*sp*vy-rf*vy)/M;
+    const dvx=axl+vy*r, dvy=ayl-vx*r, dr=(A*Fyfb-B*Fyr)/CAR.IZ;
+    vx+=dvx*h; vy+=dvy*h; r+=dr*h; ax+=(axl-ax)*Math.min(1,h/0.04);
+    const w=clampNum((Math.hypot(vx,vy)-3)/4,0,1);   // 低速混入運動學模型
+    if(w<1){ r=r*w+(vx/L*Math.tan(delta))*(1-w); vy*=w; }
+    const hm=hd+0.5*r*h, ch=Math.cos(hm), sh=Math.sin(hm);
+    x+=(vx*ch-vy*sh)*h; y+=(vx*sh+vy*ch)*h; hd+=r*h;
+    slipMax=Math.max(slipMax,Math.abs(af),Math.abs(ar));
+    use+=((Fxf*Fxf+Fyf*Fyf)/(capF*capF)+(Fxr*Fxr+Fyr*Fyr)/(capR*capR))*0.5*h;
+  }
+  c.v=vx; c.vy=vy; c.yr=r; c.x=x; c.y=y; c.h=hd; c.ax=ax; c.aL=axl;
+  c.slip=Math.max(0,slipMax-0.13)*30;   // >0＝輪胎已過峰值側偏角（正在滑）
+  c.tw=(c.tw||0)+use*0.03;   // 輪胎磨耗隨抓地力使用率²累積
 }
 function wheelPts(c){
   const ch=Math.cos(c.h), sh=Math.sin(c.h), o=[];
@@ -419,29 +491,46 @@ function wheelPts(c){
   return o;
 }
 // 數有幾個輪在賽道外（4 個全部出界＝撞牆出局）
+// 路面模型（依車輪離白線距離 od，m）：柏油→縁石／鋪面緩衝→草地→碎石；線性過渡，只降低抓地力並增加滾動阻力，絕不把車「鎖死」
+const GRIP_TAB=[[0,1],[0.5,0.92],[8,0.74],[14,0.58]], RR_TAB=[[0,0],[0.5,0.12],[8,0.45],[14,1.3]];
+function surfLerp(od,tab){ if(od<=tab[0][0]) return tab[0][1];
+  for(let i=1;i<tab.length;i++) if(od<=tab[i][0]){ const a=tab[i-1], b=tab[i]; return a[1]+(b[1]-a[1])*(od-a[0])/(b[0]-a[0]); }
+  return tab[tab.length-1][1]; }
+// 數有幾個輪在賽道外（4 個全部出界＝違規），並設定 c.gs（四輪平均抓地係數）、c.rr（平均滾動阻力）
 function wheelsOut(c,fast){
-  let n=0;
+  let n=0, gs=0, rr=0;
   for(const w of wheelPts(c)){
-    if(w.x<0||w.x>GRID||w.y<0||w.y>GRID){ n++; continue; }
-    if(fast){ const nc=nearestCenter(w,c.idx); if(nc.d>track.halfWidths[nc.idx]) n++; }
-    else if(!pointInPolygon(w,track.polygon)) n++;
+    const nc=nearestCenter(w,c.idx), od0=nc.d-track.halfWidths[nc.idx];
+    const out=(w.x<0||w.x>GRID||w.y<0||w.y>GRID)?true:(fast?od0>0:!pointInPolygon(w,track.polygon));
+    const od=out?Math.max(od0,0.3):0; if(out) n++;
+    gs+=surfLerp(od,GRIP_TAB); rr+=surfLerp(od,RR_TAB);
   }
-  return n;
+  c.gs=gs/4; c.rr=rr/4; return n;
 }
-// 模擬 n 個子步；回傳終態、逐幀軌跡、事件（過線 finish / 撞牆 crash 及其發生時間）
+// 賽道界限（F1 規則）：四輪全出白線＝一次違規；前 3 次警告，第 4 次起每次罰時 5 秒
+function checkLimits(c){ const o=c.nOut>=4; let e=null;
+  if(o&&!c.off){ c.viol=(c.viol||0)+1; if(c.viol>=4){ c.pen=(c.pen||0)+5; e='pen'; } else e='warn'; }
+  c.off=o; return e; }
+// 場外護欄：離賽道邊緣 25 m；撞上只輕微減速（最低保留 8 m/s）並被帶回與賽道平行，不會卡死
+const BARRIER_M=25;
+function barrier(c){
+  const nc=nearestCenter(c,c.idx); c.idx=nc.idx; c.lat=nc.d;
+  const lim=track.halfWidths[nc.idx]+BARRIER_M;
+  if(nc.d>lim){ const q=track.center[nc.idx], k=lim/nc.d, a=track.center[Math.max(0,nc.idx-1)], b=track.center[Math.min(track.center.length-1,nc.idx+1)];
+    const out=Math.cos(c.h)*(c.x-q.x)/nc.d+Math.sin(c.h)*(c.y-q.y)/nc.d;   // 車頭朝外的程度
+    c.x=q.x+(c.x-q.x)*k; c.y=q.y+(c.y-q.y)*k; c.lat=lim; c.v=Math.max(c.v*0.97,8); c.vy=(c.vy||0)*0.8;
+    if(out>0){ let d=Math.atan2(b.y-a.y,b.x-a.x)-c.h; d=Math.atan2(Math.sin(d),Math.cos(d)); c.h+=d*0.5; } }   // 只擋向外的轉向；往賽道內打方向可以自己駛離護欄
+}
+// 模擬 n 個子步；回傳終態、逐幀軌跡、過線事件
 function simulate(c0, cmd, dt, n, fast){
-  const c={...c0}, frames=[{x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss}]; let ev=null;
+  const c={...c0}, frames=[{x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss,sl:0}]; let ev=null;
   const g0=track.finishGate[0], g1=track.finishGate[1];
   for(let i=1;i<=n;i++){
     const a={x:c.x,y:c.y};
-    stepCar(c, cmd.thr, cmd.str, dt);
-    frames.push({x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss});
+    c.rev=!!cmd.rev; stepCar(c, cmd.thr, cmd.str, dt); barrier(c);
+    frames.push({x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss,sl:c.slip>0?1:0});
     if(segIntersect(a,c,g0,g1)){ ev={type:'finish',t:i*dt}; break; }
-    if(fast){
-      const nc=nearestCenter(c, c.idx); c.idx=nc.idx; c.lat=nc.d;
-    }
-    c.nOut=wheelsOut(c,fast);
-    if(c.nOut>=4){ ev={type:'crash',t:i*dt}; break; }
+    c.nOut=wheelsOut(c,fast); checkLimits(c);
   }
   return {car:c, frames, ev};
 }
@@ -464,38 +553,79 @@ function obbHit(A,B){
 function resolveCollision(a,b){
   const h=obbHit(carBox(a),carBox(b)); if(!h) return null;
   const sp=h.d/2+0.01; a.x-=h.nx*sp; a.y-=h.ny*sp; b.x+=h.nx*sp; b.y+=h.ny*sp;
-  const va={x:Math.cos(a.h)*a.v,y:Math.sin(a.h)*a.v}, vb={x:Math.cos(b.h)*b.v,y:Math.sin(b.h)*b.v};
+  const wv=c=>({x:Math.cos(c.h)*c.v-Math.sin(c.h)*(c.vy||0), y:Math.sin(c.h)*c.v+Math.cos(c.h)*(c.vy||0)}), va=wv(a), vb=wv(b);
+  const v0a={x:va.x,y:va.y}, v0b={x:vb.x,y:vb.y};
+  let jj=0;
   const rel=(vb.x-va.x)*h.nx+(vb.y-va.y)*h.ny, power=Math.max(0,-rel);
   if(rel<0){
-    const j=-(1.25)*rel/2; va.x-=j*h.nx; va.y-=j*h.ny; vb.x+=j*h.nx; vb.y+=j*h.ny;
+    const j=-(1.25)*rel/2; jj=j; va.x-=j*h.nx; va.y-=j*h.ny; vb.x+=j*h.nx; vb.y+=j*h.ny;
     const tx=-h.ny, ty=h.nx, f=0.1*((vb.x-va.x)*tx+(vb.y-va.y)*ty);
     va.x+=f*tx; va.y+=f*ty; vb.x-=f*tx; vb.y-=f*ty;
   }
   [[a,va],[b,vb]].forEach(([c,v])=>{
-    if(Math.hypot(v.x,v.y)>1.5){ let d=Math.atan2(v.y,v.x)-c.h; d=Math.atan2(Math.sin(d),Math.cos(d)); c.h+=d*0.5; }
-    c.v=Math.max(0,(v.x*Math.cos(c.h)+v.y*Math.sin(c.h))*0.97);
+    const ch=Math.cos(c.h), sh=Math.sin(c.h);   // 動態模型：車頭不用硬轉，速度向量拆成縱向／側向，之後由輪胎力自然修正
+    c.v=(v.x*ch+v.y*sh)*0.97; c.vy=(-v.x*sh+v.y*ch)*0.97;
   });
-  return {x:h.px,y:h.py,power};
+  if(jj){ const kk=0.04, cl=x=>clampNum(x,-0.5,0.5);   // 偏心撞擊產生車頭旋轉
+    a.h+=cl(kk*-jj*((h.px-a.x)*h.ny-(h.py-a.y)*h.nx)); b.h+=cl(kk*jj*((h.px-b.x)*h.ny-(h.py-b.y)*h.nx)); }
+  return {x:h.px,y:h.py,power,nx:h.nx,ny:h.ny,v0a,v0b};
 }
-// 雙車同步模擬（含碰撞）。回傳每位玩家的 {car,frames,ev} 與碰撞事件
-function simulateJoint(cmds){
-  const cs=players.map(p=>({...p.car})), snap=c=>({x:c.x,y:c.y,h:c.h,v:c.v,ss:c.ss});
-  const fr=cs.map(c=>[snap(c)]), evs=[null,null], hits=[], g0=track.finishGate[0], g1=track.finishGate[1]; let lastHit=-1;
-  for(let i=1;i<=SUB;i++){
-    const t=i*DT;
-    cs.forEach((c,k)=>{ if(evs[k]) return; const a={x:c.x,y:c.y}; stepCar(c,cmds[k].thr,cmds[k].str,DT);
-      if(segIntersect(a,c,g0,g1)){ evs[k]={type:'finish',t}; fr[k].push(snap(c)); } });
-    if(!evs[0]&&!evs[1]){ const h=resolveCollision(cs[0],cs[1]); if(h&&h.power>1&&t-lastHit>=0.2){ hits.push({t,x:h.x,y:h.y,power:h.power}); lastHit=t; } }
-    cs.forEach((c,k)=>{ if(evs[k]) return; c.nOut=wheelsOut(c,false); if(c.nOut>=4) evs[k]={type:'crash',t}; fr[k].push(snap(c)); });
-    if(evs[0]&&evs[1]) break;
+// 判責（仿 F1 steward）：前後相撞→後車負責；側向相撞→主動切入對方者負責；差不多則視為競賽事故（無責任）
+function faultOf(h,ca,cb){
+  const cen=track.center, i0=Math.max(0,ca.idx-1), i1=Math.min(cen.length-1,ca.idx+1);
+  let tx=cen[i1].x-cen[i0].x, ty=cen[i1].y-cen[i0].y; const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
+  const along=h.nx*tx+h.ny*ty;
+  if(Math.abs(along)>0.7) return along>0?0:1;
+  const ia=h.v0a.x*h.nx+h.v0a.y*h.ny, ib=-(h.v0b.x*h.nx+h.v0b.y*h.ny);
+  return ia-ib>0.8?0:(ib-ia>0.8?1:null);
+}
+// 多車同步模擬（含兩兩碰撞、賽道界限）。已過線的車停在原地
+function simulateJoint(cmds,lim){
+  const n=players.length, cs=players.map(p=>({...p.car})), snap=c=>({x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss});
+  const fr=cs.map(c=>[snap(c)]), evs=cs.map(()=>null), hits=[], viols=[], g0=track.finishGate[0], g1=track.finishGate[1], last={};
+  for(let i=1;i<=(lim||SUB);i++){
+    const t=i*DT, slot=((i-1)/5)|0;
+    cs.forEach((c,k)=>{ if(c.fin) return; let best=0;
+      cs.forEach((o,j)=>{ if(j===k||o.fin||o.v<25) return; const dx=o.x-c.x, dy=o.y-c.y, f=dx*Math.cos(c.h)+dy*Math.sin(c.h), l=Math.abs(-dx*Math.sin(c.h)+dy*Math.cos(c.h));
+        if(f>3&&f<35&&l<2.2) best=Math.max(best,0.25*(1-f/35)*(1-l/2.2)); });
+      c.dr=best; });
+    cs.forEach((c,k)=>{ if(c.fin) return; const a={x:c.x,y:c.y}; const cm=cmdAt(cmds[k],slot); c.rev=!!cm.rev; stepCar(c,cm.thr,cm.str,DT); barrier(c);
+      if(segIntersect(a,c,g0,g1)){ evs[k]={type:'finish',t}; c.fin=true; fr[k].push(snap(c)); } });
+    for(let a=0;a<n;a++) for(let b=a+1;b<n;b++){ if(cs[a].fin||cs[b].fin) continue; if(Math.abs(cs[a].x-cs[b].x)>8||Math.abs(cs[a].y-cs[b].y)>8) continue;
+      const h=resolveCollision(cs[a],cs[b]), key=a*8+b, lt=last[key]===undefined?-1:last[key];
+      if(h&&h.power>1){
+        if(t-lt>=0.2){ hits.push({t,x:h.x,y:h.y,power:h.power,a,b}); last[key]=t; }
+        const fk=h.power>=2?faultOf(h,cs[a],cs[b]):null;
+        if(fk!==null){ const k=fk===0?a:b, c=cs[k], T=simClock+t;
+          if(c.colT===undefined||T-c.colT>=1.5){ const pen=h.power>=12?10:5; c.pen=(c.pen||0)+pen; c.colT=T; viols.push({t,k,n:0,pen,x:h.x,y:h.y,col:true}); } }
+      } }
+    cs.forEach((c,k)=>{ if(c.fin) return; c.nOut=wheelsOut(c,false); const e=checkLimits(c);
+      if(e) viols.push({t,k,n:c.viol,pen:e==='pen'?5:0,x:c.x,y:c.y}); fr[k].push(snap(c)); });
+    if(cs.every(c=>c.fin)) break;
   }
-  return {res:cs.map((c,k)=>({car:c,frames:fr[k],ev:evs[k]})), hits};
+  return {res:cs.map((c,k)=>({car:c,frames:fr[k],ev:evs[k]})), hits, viols};
 }
 
 // ---------- 遊戲流程 ----------
 function newPlayer(id,color,start,h,isAI){
-  return {id,color,isAI, car:{x:start.x,y:start.y,h,v:0,ts:0,ss:0,idx:0,slip:0,nOut:0}, stick:{x:0,y:0.6}, wheel:0,
+  return {id,color,isAI,rev:false, car:{x:start.x,y:start.y,h,v:0,vy:0,ts:0,ss:0,idx:0,slip:0,nOut:0,viol:0,pen:0,off:false,fin:false,tw:0,dr:0,gs:1,rr:0,yr:0}, stick:{x:0,y:0.6}, wheel:0,
           trail:[{x:start.x,y:start.y}], marks:[], ready:false, cmd:null, sim:null, preview:null, finT:null};
+}
+// 沿中心線取弧長 s 處的位置／方向
+function trackAt(s){
+  const a=track.arcLen, c=track.center; let lo=0, hi=a.length-1; s=clampNum(s,0,a[hi]);
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(a[m]<=s) lo=m; else hi=m; }
+  const u=(s-a[lo])/Math.max(1e-6,a[hi]-a[lo]), dx=c[hi].x-c[lo].x, dy=c[hi].y-c[lo].y, l=Math.hypot(dx,dy)||1;
+  return {x:c[lo].x+dx*u, y:c[lo].y+dy*u, tx:dx/l, ty:dy/l, h:Math.atan2(dy,dx)};
+}
+// F1 交錯式起跑格：每排 2 輛、排距 8 m、同排兩車前後錯開 4 m；竿位在最前面
+function makeGrid(n){
+  const rows=Math.ceil(n/2), total=track.arcLen[track.arcLen.length-1]; let rs=8, S0=14+(rows-1)*rs+4;
+  if(S0>total*0.45){ rs=Math.max(6.5,(total*0.45-18)/Math.max(1,rows-1)); S0=14+(rows-1)*rs+4; }
+  const off=Math.min(2.8,track.halfWidths[0]*0.4), out=[];
+  for(let k=0;k<n;k++){ const row=k>>1, col=k&1, s=S0-row*rs-col*4, t=trackAt(s), lat=col?off:-off;
+    out.push({x:t.x-t.ty*lat, y:t.y+t.tx*lat, h:t.h, k}); }
+  return out;
 }
 function initGame(){
   track=(useCustom&&customTrack)?buildCustom():generateTrack();
@@ -503,89 +633,149 @@ function initGame(){
   const c2=getComputedStyle(document.documentElement).getPropertyValue('--p2').trim();
   const t=track.center[Math.min(3,track.center.length-1)], s=track.center[0];
   const h=Math.atan2(t.y-s.y, t.x-s.x);
-  players=[ newPlayer(0,c1,track.p1Start,h,false), newPlayer(1,c2,track.p2Start,h,mode==='ai') ];
+  const n=mode==='ai'?1+nAI:2, cols=[c1,c2,'#4cd964','#ffd45a'], tx=Math.cos(h), ty=Math.sin(h), hw0=track.halfWidths[0];
+  const colOf=i=>cols[i]||('hsl('+Math.round((i*137.508)%360)+',72%,58%)');
+  const sp=n===2?5:Math.min(3.4,(2*hw0-3.6)/Math.max(1,n-1));
+  players=[]; gridToken++; document.getElementById('lights').classList.remove('show','go'); delete track.grid;
+  if(gridMode&&mode==='ai'){
+    const slots=makeGrid(n); track.grid=slots;
+    let mine=gridPos==='pole'?0:gridPos==='mid'?Math.floor(n/2)-1:gridPos==='back'?n-1:Math.floor(Math.random()*n);
+    const rest=slots.map((_,k)=>k).filter(k=>k!==mine); for(let i=rest.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [rest[i],rest[j]]=[rest[j],rest[i]]; }
+    for(let i=0;i<n;i++){ const k=i===0?mine:rest[i-1], g=slots[k]; const p=newPlayer(i,colOf(i),{x:g.x,y:g.y},g.h,i>0); p.grid=k+1; p.lane=(k&1)?Math.min(2.8,track.halfWidths[0]*0.4):-Math.min(2.8,track.halfWidths[0]*0.4); p.lane0=0; players.push(p); }
+  } else {
+    for(let i=0;i<n;i++){ const off=(i-(n-1)/2)*sp; players.push(newPlayer(i,colOf(i),{x:s.x+tx*8-ty*off,y:s.y+ty*8+tx*off},h,mode==='ai'&&i>0)); }
+  }
+  document.getElementById('panel1').style.display=(mode==='ai'&&nAI>1)?'none':'';
+  document.getElementById('board').style.display=players.length>2?'block':'none'; document.getElementById('board').classList.toggle('big',players.length>6);
   players.forEach(p=>{ p.car.idx=globalNearest(p.car).idx; });
   document.getElementById('name1').textContent = mode==='ai' ? `AI (${{easy:'簡單',medium:'中等',hard:'困難'}[aiDifficulty]})` : '玩家2';
   document.getElementById('stick1').style.display = mode==='ai' ? 'none' : '';
-  document.getElementById('ok1').style.display = mode==='ai' ? 'none' : '';
+  document.getElementById('ok1').style.display = mode==='ai' ? 'none' : ''; document.getElementById('gear1').style.display = mode==='ai' ? 'none' : '';
   document.getElementById('pv1').style.display = mode==='ai' ? 'none' : '';
-  step=0; gameOver=false; phase='idle'; history=[]; hitMarks=[]; curHits=[]; replay=null; document.getElementById('replayBar').classList.remove('show');
-  fitView(); if(follow) scale=4.5; beginStep();
+  step=0; simClock=0; gameOver=false; phase='idle'; history=[]; hitMarks=[]; curHits=[]; replay=null; document.getElementById('replayBar').classList.remove('show');
+  fitView(); if(follow) scale=4.5;
+  if(gridMode&&mode==='ai') startLights(); else beginStep();
   if(!running){ running=true; requestAnimationFrame(loop); }
 }
+// 五燈起跑序列（只在 22 車模式）
+function startLights(){
+  const tok=++gridToken, box=document.getElementById('lights'), dots=[...document.querySelectorAll('#lightRow i')], msg=document.getElementById('lightMsg');
+  dots.forEach(d=>d.classList.remove('on')); box.classList.remove('go'); msg.textContent='🚦 起跑準備'; box.classList.add('show'); phase='lights'; updatePanels();
+  let i=0;
+  (function tick(){ if(tok!==gridToken||phase!=='lights') return;
+    if(i<5){ dots[i++].classList.add('on'); setTimeout(tick,520); }
+    else setTimeout(()=>{ if(tok!==gridToken||phase!=='lights') return;
+      dots.forEach(d=>d.classList.remove('on')); box.classList.add('go'); msg.textContent='GO!'; beginStep();
+      setTimeout(()=>{ if(tok===gridToken) box.classList.remove('show','go'); },900); },500+Math.random()*900);
+  })();
+}
+// AI 依賽道位置由前到後依序決策：後車能看到前車剛下的指令，預測更準；逐一排程避免卡住畫面
+function scheduleAI(list){
+  const tok=++aiTok, arc=track.arcLen; list=list.slice().sort((a,b)=>arc[b.car.idx]-arc[a.car.idx]);
+  decCounter=0;
+  (function next(){ if(tok!==aiTok) return; const p=list.shift(); if(!p){ if(phase==='decide') aiNegotiate(()=>aiRepair(()=>{ if(phase==='decide'&&players.every(q=>q.ready)) startSim(); })); return; }
+    if(phase==='decide'&&!p.ready) aiDecide(p,true); setTimeout(next,0); })();
+}
 function beginStep(){
-  step++; phase='decide'; deadline=performance.now()+DECIDE_MS;
-  players.forEach(p=>{ p.ready=false; p.cmd=null; p.sim=null; }); curHits=[];
+  aiTok++; step++; phase='decide'; deadline=performance.now()+DECIDE_MS;
+  players.forEach(p=>{ p.prev=p.cmd&&p.cmd.plan?p.cmd:null; p.ready=false; p.cmd=null; p.sim=null; }); curHits=[]; curViols=[];   // prev＝上一步公布的意圖，供還沒決策的車被別人參考
+  const aiList=[];
   players.forEach(p=>{
-    if(p.isAI){ setTimeout(()=>aiDecide(p), 60); }
+    if(p.car.fin){ p.ready=true; p.cmd={thr:0,str:0}; }
+    else if(p.isAI){ aiList.push(p); }
     else { updatePreview(p); renderStick(p); }
   });
   updatePanels();
+  if(aiList.length){ const tk=aiTok; setTimeout(()=>{ if(tk===aiTok) scheduleAI(aiList); },60); }
 }
+// 玩家按下「插入決策」：把目前這一步在下一個 0.1s 刻度截斷（重算到該刻度為止，結果與原模擬完全一致），立刻進入下一步決策
+function interruptStep(){
+  if(phase!=='sim'||gameOver) return;
+  const T=insertTime(); if(T===null) return;
+  const n=Math.round(T/DT), r=simulateJoint(players.map(p=>p.cmd),n);
+  players.forEach((p,k)=>{ p.sim=r.res[k]; if(p.isAI&&p.cmd){ const l=cmdAt(p.cmd,Math.round(T/AI_FINE)-1); p.lastStr=l.str; p.lastThr=l.thr; } });
+  curHits=r.hits; curViols=r.viols; simDur=T; updatePanels();
+}
+function insertTime(){   // 回傳可插入的時間點（吸附到 0.1s），太接近步尾則回傳 null
+  const el=(performance.now()-simStart)/1000, T=Math.max(0.1,Math.round(Math.ceil((el+0.03)*10-1e-9))/10);
+  return T>=simDur-0.04?null:T;
+}
+function toggleGear(p){ if(phase!=='decide'||p.ready||p.isAI||gameOver) return; p.rev=!p.rev; updatePreview(p); updatePanels(); }
 function setReady(p){
   if(phase!=='decide'||p.ready||gameOver) return;
-  p.ready=true; p.cmd={thr:p.stick.y, str:p.stick.x};
+  p.ready=true; p.cmd={thr:p.stick.y, str:p.stick.x, rev:p.rev};
   updatePanels(); players.forEach(renderStick);
   if(players.every(q=>q.ready)) startSim();
 }
 function startSim(){
-  const r=simulateJoint(players.map(p=>p.cmd)); players.forEach((p,k)=>{ p.sim=r.res[k]; }); curHits=r.hits;
-  simStart=performance.now(); phase='sim'; updatePanels();
+  const r=simulateJoint(players.map(p=>p.cmd)); players.forEach((p,k)=>{ p.sim=r.res[k]; }); curHits=r.hits; curViols=r.viols;
+  simStart=performance.now(); simDur=STEP_T; phase='sim'; updatePanels();
 }
 function finishSim(){
   players.forEach(p=>{
     p.car=p.sim.car; p.car.idx=globalNearest(p.car).idx;
-    p.sim.frames.forEach((f,i)=>{ if(i>0&&i%2===0) p.trail.push({x:f.x,y:f.y}); });
-    const l=p.sim.frames[p.sim.frames.length-1]; p.trail.push({x:l.x,y:l.y}); p.marks.push({x:l.x,y:l.y});
-    if(p.sim.ev&&p.sim.ev.type==='finish') p.finT=(step-1)+p.sim.ev.t;
+    if(p.sim.frames.length>1){
+      p.sim.frames.forEach((f,i)=>{ if(i>0&&i%2===0) p.trail.push({x:f.x,y:f.y}); });
+      const l=p.sim.frames[p.sim.frames.length-1]; p.trail.push({x:l.x,y:l.y}); p.marks.push({x:l.x,y:l.y});
+    }
+    if(p.sim.ev&&p.sim.ev.type==='finish') p.finT=simClock+p.sim.ev.t;
   });
-  history.push({frames:players.map(p=>p.sim.frames), hits:curHits.map(h=>({...h,t:h.t+step-1}))});
+  history.push({frames:players.map(p=>p.sim.frames), hits:curHits.map(h=>({...h,t:h.t+simClock})), viols:curViols.map(v=>({...v,t:v.t+simClock}))});
   curHits.forEach(h=>hitMarks.push({x:h.x,y:h.y}));
-  const evs=players.filter(p=>p.sim.ev).map(p=>({p,ev:p.sim.ev})).sort((a,b)=>a.ev.t-b.ev.t);
-  phase='idle';
-  if(evs.length){
-    const f=evs[0], tie=evs[1]&&Math.abs(evs[1].ev.t-f.ev.t)<1e-9&&evs[1].ev.type===f.ev.type;
-    if(tie) return endGame(null,'draw');
-    if(f.ev.type==='finish') return endGame(f.p,'finish');
-    return endGame(players[1-f.p.id],'crash',f.p);
-  }
+  simClock+=simDur; phase='idle';
+  // 以含罰時的成績決勝負：最佳成績者確定後，其餘車只要仍有機會在該成績內完賽就繼續跑
+  const adj=p=>p.finT+(p.car.pen||0), fin=players.filter(p=>p.car.fin).sort((a,b)=>adj(a)-adj(b)), rest=players.filter(p=>!p.car.fin);
+  if(fin.length){ const f=fin[0];
+    if(!rest.length||rest.every(o=>simClock+(o.car.pen||0)>=adj(f))){
+      if(fin[1]&&Math.abs(adj(fin[1])-adj(f))<1e-9) return endGame(null,'draw');
+      return endGame(f,'finish'); } }
   beginStep();
 }
-function pname(p){ return p.id===0?'玩家1':(mode==='ai'?'AI':'玩家2'); }
-function endGame(winner,reason,loser){
+function pname(p){ return p.id===0?'玩家1':(mode==='ai'?(nAI>1?'AI '+p.id:'AI'):'玩家2'); }
+function ranking(){
+  const adj=p=>p.finT+(p.car.pen||0);
+  return players.slice().sort((a,b)=>{ const fa=a.car.fin, fb=b.car.fin; if(fa&&fb) return adj(a)-adj(b); if(fa) return -1; if(fb) return 1;
+    return track.arcLen[globalNearest(b.car).idx]-track.arcLen[globalNearest(a.car).idx]; });
+}
+function endGame(winner,reason){
   gameOver=true; phase='over'; updatePanels();
-  const T=document.getElementById('overlayTitle'), Mg=document.getElementById('overlayMsg');
-  if(reason==='finish'){ T.textContent='🏁 衝線！'; Mg.textContent=`${pname(winner)} 獲勝！用時 ${winner.finT.toFixed(2)} 秒`; }
-  else if(reason==='crash'){ T.textContent='💥 撞牆了！'; Mg.textContent=`${pname(loser)} 出界，${pname(winner)} 獲勝！`; }
-  else { T.textContent='💥 同時撞牆'; Mg.textContent='平手！'; }
+  const T=document.getElementById('overlayTitle'), Mg=document.getElementById('overlayMsg'), lines=[];
+  if(reason==='draw'){ T.textContent='🤝 平手'; lines.push('成績相同！'); }
+  else { T.textContent='🏁 衝線！'; lines.push(pname(winner)+' 獲勝！'); }
+  ranking().forEach((p,i)=>{ const pn=p.car.pen||0;
+    lines.push((i+1)+'. '+pname(p)+(gridMode&&p.grid?' [起跑 P'+p.grid+']':'')+' — '+(p.car.fin?p.finT.toFixed(2)+' 秒'+(pn?' + 罰時 '+pn+' 秒 = '+(p.finT+pn).toFixed(2)+' 秒':''):'未完賽'+(pn?'（罰時 +'+pn+' 秒）':''))); });
+  Mg.innerHTML=lines.join('<br>');
   document.getElementById('overlay').classList.add('show');
 }
 
 // ---------- 預覽 / 搖桿 / UI ----------
 function updatePreview(p){
   if(p.isAI) return;
-  p.preview=simulate(p.car,{thr:p.stick.y,str:p.stick.x},0.05,20,false);
+  p.preview=simulate(p.car,{thr:p.stick.y,str:p.stick.x,rev:p.rev},DT,SUB,false);
 }
 function renderStick(p){
   if(p.isAI) return;
   const el=document.getElementById('stick'+p.id), R=(el.clientWidth||104)/2*0.8;
   el.querySelector('.knob').style.transform=`translate(${p.stick.x*R}px,${-p.stick.y*R}px)`;
-  el.classList.toggle('locked', p.ready||phase!=='decide');
+  el.classList.toggle('locked', p.ready||phase!=='decide'); el.querySelector('.u').textContent=p.rev?'倒車':'加速';
   const y=p.stick.y, x=p.stick.x;
   document.getElementById('rd'+p.id).textContent =
-    (y>=0?`加速 ${Math.round(y*100)}%`:`煞車 ${Math.round(-y*100)}%`)+`｜轉向 ${Math.abs(x)<0.02?'直行':(x<0?'左 ':'右 ')+Math.round(Math.abs(x)*100)+'%'}`;
+    (y>=0?`${p.rev?'倒車':'加速'} ${Math.round(y*100)}%`:`煞車 ${Math.round(-y*100)}%`)+`｜轉向 ${Math.abs(x)<0.02?'直行':(x<0?'左 ':'右 ')+Math.round(Math.abs(x)*100)+'%'}`;
   if(p.preview){ const f=p.preview.frames; document.getElementById('pv'+p.id).textContent =
-    `1s 後預計 ${Math.round(f[f.length-1].v*3.6)} km/h${p.preview.ev?(p.preview.ev.type==='crash'?' ⚠撞牆':' 🏁'):''}${p.preview.car.slip>0.5?' ⚠滑':''}${p.preview.car.nOut>0?' ⚠'+p.preview.car.nOut+'輪越線':''}`; }
+    `${STEP_T}s 後預計 ${Math.round(f[f.length-1].v*3.6)} km/h${p.preview.ev?' 🏁':''}${p.preview.car.nOut>=4?' ⚠四輪出界':''}${p.preview.car.slip>0.5?' ⚠滑':''}${p.preview.car.nOut>0?' ⚠'+p.preview.car.nOut+'輪越線':''}`; }
 }
 function updatePanels(){
+  players.forEach(p=>{ const e=document.getElementById('tl'+p.id); if(e) e.textContent='界限 '+Math.min(p.car.viol||0,3)+'/3'+(p.car.pen?'｜罰時 +'+p.car.pen+'s':'')+'｜輪胎 '+Math.round(100-20*Math.min(1,p.car.tw||0))+'%'+((p.car.dr||0)>0.05?'｜尾流':'')+(Math.abs(p.car.vy||0)>1&&p.car.v>8?'｜側滑 '+Math.round(Math.abs(Math.atan2(p.car.vy,p.car.v))*57.3)+'°':'')+(p.car.fin?'｜🏁':''); });
   players.forEach(p=>{
-    if(!p.isAI){ const b=document.getElementById('ok'+p.id); b.disabled=p.ready||phase!=='decide'; b.textContent=p.ready?'已確認 ✓':'確認 OK'; renderStick(p); }
+    if(!p.isAI){ const g=document.getElementById('gear'+p.id); g.disabled=p.ready||phase!=='decide'; g.textContent=p.rev?'R 倒車':'D 前進'; g.classList.toggle('rev',!!p.rev);
+      const b=document.getElementById('ok'+p.id); b.disabled=p.ready||phase!=='decide'; b.textContent=p.ready?'已確認 ✓':'確認 OK'; renderStick(p); }
   });
-  if(mode==='ai'){ const p=players[1]; document.getElementById('rd1').textContent = phase==='decide' ? (p.ready?'AI 已就緒 ✓':'AI 思考中…') : ''; }
+  if(mode==='ai'){ const ais=players.filter(q=>q.isAI&&!q.car.fin), rd=ais.filter(q=>q.ready).length; document.getElementById('rd1').textContent = phase==='decide' ? (rd===ais.length?'AI 已就緒 ✓':'AI 思考中…'+(ais.length>1?' ('+rd+'/'+ais.length+')':'')) : ''; }
   const pb=document.getElementById('phaseBadge');
-  pb.textContent = phase==='decide' ? '決策中' : phase==='sim' ? '模擬 1 秒…' : phase==='over' ? '結束' : phase==='replay' ? '🎬 重播' : '…';
+  pb.textContent = phase==='decide' ? '決策中' : phase==='sim' ? '模擬 '+simDur.toFixed(1)+' 秒…' : phase==='over' ? '結束' : phase==='lights' ? '🚦 起跑燈號' : phase==='replay' ? '🎬 重播' : '…';
+  document.getElementById('btnInsert').style.display=(phase==='sim'&&!gameOver)?'flex':'none';
   document.getElementById('stepBadge').textContent='步驟 '+step;
-  document.getElementById('timeBadge').textContent='t = '+(phase==='sim'?step:step-1)+' s';
+  document.getElementById('timeBadge').textContent='t = '+(phase==='sim'?simClock+simDur:simClock).toFixed(1)+' s';
 }
 function makeStick(id){
   const el=document.getElementById('stick'+id); let act=false;
@@ -597,8 +787,10 @@ function makeStick(id){
   ['pointerup','pointercancel'].forEach(n=>el.addEventListener(n,()=>{act=false;}));
 }
 window.addEventListener('keydown',e=>{
+  if(track&&phase==='sim'&&(e.key===' '||e.key==='Enter')){ e.preventDefault(); if(!e.repeat) interruptStep(); return; }
   if(!track||phase!=='decide') return;
   const k=e.key.toLowerCase(); let who=-1,dx=0,dy=0,ok=false;
+  if(k==='r'||k==='/'){ e.preventDefault(); const q=players[k==='r'?0:(mode==='ai'?0:1)]; if(q) toggleGear(q); return; }
   if(k.length===1&&'wasd'.includes(k)){ who=0; dy=k==='w'?.1:k==='s'?-.1:0; dx=k==='d'?.1:k==='a'?-.1:0; }
   else if(k.startsWith('arrow')){ who=mode==='ai'?0:1; dy=k==='arrowup'?.1:k==='arrowdown'?-.1:0; dx=k==='arrowright'?.1:k==='arrowleft'?-.1:0; }
   else if(k===' '){ who=0; ok=true; } else if(k==='enter'){ who=mode==='ai'?0:1; ok=true; }
@@ -612,80 +804,310 @@ window.addEventListener('keydown',e=>{
 // ---------- AI ----------
 // 以 0.1s 粗步長模擬候選操作（油門×轉向），beam search 向前看數秒；
 // 評分＝沿賽道前進距離 − 偏離中線 − 車頭與賽道方向偏差 − 入彎超速（依前方彎道曲率算出安全速度）
-function overspeed(c){
-  const cen=track.center, arc=track.arcLen, v=c.v;
-  /* 前瞻距離 = 下一步可能再加速 + 煞車距離 + 餘量 */ const look=(v*1.3+v*v/(2*26)+12)/M; let minR=Infinity;
-  for(let i=c.idx;i<cen.length&&arc[i]-arc[c.idx]<look;i++) if(track.curvature[i]<minR) minR=track.curvature[i];
-  if(!isFinite(minR)) return 0;
-  const k=1/(minR*M)-CAR.DF*9.8; if(k<=0) return 0;
-  return Math.max(0, v-Math.sqrt(9.8*CAR.MU0/k)*0.95);
+// 速度上限剖面：由曲率算各點彎道極速，再由後往前以煞車能力回推（含提前煞車距離）
+function ensureProfile(){
+  if(track.vlim) return;
+  const n=track.center.length, arc=track.arcLen, vc=[];
+  for(let i=0;i<n;i++){ const R=track.curvature[i], k=isFinite(R)?1/R:0, q=k-9.8*CAR.DF; vc.push(q<=1e-6?200:Math.sqrt(9.8*CAR.MU0/q)); }
+  const vl=vc.map((v,i)=>{ let m=v; for(let j=Math.max(0,i-3);j<=Math.min(n-1,i+10);j++) m=Math.min(m,vc[j]); return m*0.86; });
+  vl[n-1]=200;
+  // 回推煞車點：煞車能力隨速度變化（低速抓地力小、不可能煞到 3 g），並留 20% 給轉向
+  const ab=v=>0.8*Math.min(CAR.BMAX,9.8*(CAR.MU0+CAR.DF*v*v))+0.5*CAR.DRAG*v*v+1.5;
+  for(let i=n-2;i>=0;i--) vl[i]=Math.min(vl[i],Math.sqrt(vl[i+1]*vl[i+1]+2*ab(vl[i+1])*(arc[i+1]-arc[i])));
+  track.vlim=vl;
+  // 賽車線：出彎前外側、彎心內側（窄／寬兩個高斯平滑曲率之差），AI 以此為偏移目標
+  const cen=track.center, kap=cen.map((p,i)=>{ const p0=cen[Math.max(0,i-4)], p2=cen[Math.min(n-1,i+4)], a=dist(p,p2), b=dist(p0,p2), cc=dist(p0,p);
+    return (a<1e-6||b<1e-6||cc<1e-6)?0:2*((p.x-p0.x)*(p2.y-p0.y)-(p2.x-p0.x)*(p.y-p0.y))/(a*b*cc); });
+  const gs=(arr,sg)=>{ const r=Math.ceil(sg*2.5), w=[]; let sum=0; for(let j=-r;j<=r;j++){ const x=Math.exp(-j*j/(2*sg*sg)); w.push(x); sum+=x; }
+    return arr.map((_,i)=>{ let a=0; for(let j=-r;j<=r;j++) a+=arr[Math.min(n-1,Math.max(0,i+j))]*w[j+r]; return a/sum; }); };
+  const k1=gs(kap,4), k2=gs(kap,14);
+  track.rl=k1.map((v,i)=>{ const m=Math.min(track.halfWidths[i]*0.6,track.halfWidths[i]-3.5); return clampNum(450*v-350*k2[i],-m,m); });
 }
 // 預測對手未來軌跡（每 0.1s 一點）：A＝維持目前搖桿指令的物理推演；B＝沿賽道中線、保持側向偏移的「幽靈」
-let oppPred=null;
-function buildOppPred(me,N){
-  const o=players[1-me.id], c0=o.car, A=[], B=[]; let c={...c0};
-  A.push({x:c.x,y:c.y,h:c.h});
-  for(let i=0;i<N;i++){ stepCar(c,o.stick.y,o.stick.x,0.1); A.push({x:c.x,y:c.y,h:c.h}); }
-  const cen=track.center, arc=track.arcLen, k=globalNearest(c0).idx, a=cen[Math.max(0,k-1)], b=cen[Math.min(cen.length-1,k+1)];
-  let tx=b.x-a.x, ty=b.y-a.y; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
-  const off=(c0.x-cen[k].x)*(-ty)+(c0.y-cen[k].y)*tx, acc=clampNum(8*(1-c0.v/70),0,8);
-  for(let i=0;i<=N;i++){
-    const t=i*0.1, s=arc[k]+c0.v*t+0.5*acc*t*t; let j=k; while(j<cen.length-1&&arc[j]<s) j++;
-    const p=cen[j], q=cen[Math.min(cen.length-1,j+1)], pp=cen[Math.max(0,j-1)]; let ux=q.x-pp.x, uy=q.y-pp.y; const ul=Math.hypot(ux,uy)||1; ux/=ul; uy/=ul;
-    B.push({x:p.x-uy*off, y:p.y+ux*off, h:Math.atan2(uy,ux)});
-  }
-  return [A,B];
+let oppPred=null, defCtx=null;
+// 多車（≥6 台）模式：fieldMode＝啟用「車群守線」；packLat/packW＝本車守住的橫向位置與權重（旁邊有車時不再各自搶賽車線而互相交叉）
+let fieldMode=false, packLat=null, packW=0;
+function cmdFor(o,i){ return (o.ready&&o.cmd)?cmdAt(o.cmd,i):{thr:o.stick.y,str:o.stick.x,rev:o.rev}; }
+function buildOppPred(me,N){   // 只預測附近（≤100 m）最近的對手；N＝要預測的 0.1s 格數
+  const arc=track.arcLen, mi=me.car.idx;
+  const near=players.filter(o=>o!==me&&!o.car.fin&&Math.abs(arc[o.car.idx]-arc[mi])<90&&dist(o.car,me.car)<100)
+    .sort((a,b)=>dist(a.car,me.car)-dist(b.car,me.car)).slice(0,nAI>3?8:3);
+  return near.map(o=>{
+    // 車與車之間會「通訊」：每台 AI 決策後公布完整意圖（plan）。
+    //  已決策的車：這步的指令是確定的，之後依它公布的意圖；人類只知道目前搖桿，假設維持。
+    //  還沒決策的車：用它上一步公布的意圖，從它現在的真實狀態接著推演；都沒有才假設直線前進。
+    const c=o.car, q={...c}, A=[{x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0}]; let i=1, known=10;
+    const go=m=>{ q.rev=!!m.rev; for(let z=0;z<5;z++) stepCar(q,m.thr,m.str,DT); A.push({x:q.x,y:q.y,h:q.h,v:q.v,vy:q.vy||0}); i++; };
+    if(o.ready&&o.cmd){ const K=o.cmd.seq?o.cmd.seq.length:10;
+      for(;i<=Math.min(N,K);) go(cmdAt(o.cmd,i-1));
+      if(o.cmd.plan){ known=o.cmd.plan.length; for(;i<=Math.min(N,known);) go(o.cmd.plan[i-1]); } }
+    else if(o.prev&&o.prev.plan){ const off=Math.round((simClock-o.prev.t)/AI_FINE), pl=o.prev.plan;
+      if(off>=0&&off<pl.length-3){ known=pl.length-off; for(;i<=Math.min(N,known);) go(pl[off+i-1]); } }
+    const L=A[A.length-1], ch=Math.cos(L.h), sh=Math.sin(L.h), i0=i-1;
+    for(;i<=N;i++){ const T=(i-i0)*0.1; A.push({x:L.x+(ch*L.v-sh*(L.vy||0))*T, y:L.y+(sh*L.v+ch*(L.vy||0))*T, h:L.h, v:L.v, vy:L.vy||0}); }
+    A.o=o; A.known=known; return A; });
 }
-// 候選路徑與對手預測軌跡的碰撞罰分：車身(加安全邊距)重疊＝重罰；10 m 內＝依距離輕罰；0.05s 子取樣避免高速穿越
-function collisionCost(r,tOff){
-  if(!oppPred) return 0;
-  const fr=r.frames, base=Math.round(tOff*10), w=[0,0];
-  for(let i=1;i<fr.length;i++) for(let k=0;k<2;k++){
-    const P=oppPred[k], a=P[Math.min(base+i,P.length-1)], a0=P[Math.min(base+i-1,P.length-1)];
-    for(const u of [0.5,1]){
-      const me={x:fr[i-1].x+(fr[i].x-fr[i-1].x)*u, y:fr[i-1].y+(fr[i].y-fr[i-1].y)*u, h:fr[i].h}, op={x:a0.x+(a.x-a0.x)*u, y:a0.y+(a.y-a0.y)*u, h:a.h};
-      const d=dist(me,op); if(d>=6.5) continue; let cst=(6.5-d)*1.2;
-      const A=carBox(me), B=carBox(op); A.hl+=0.3; A.hw+=0.3; B.hl+=0.3; B.hw+=0.3;
-      if(obbHit(A,B)) cst+=100;
-      if(cst>w[k]) w[k]=cst;
+function oppAt(P,T){   // 對手預測軌跡在時間 T（秒）的內插位置
+  const f=Math.max(0,T*10), i=Math.min(P.length-1,Math.floor(f)), j=Math.min(P.length-1,i+1), u=Math.min(1,f-i), a=P[i], b=P[j];
+  return {x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u, h:a.h+(b.h-a.h)*u, v:a.v+(b.v-a.v)*u};
+}
+// 安全車距：假設前車下一刻全力煞車，我方若來不及停（含車長+緩衝約 8 m）就扣分——避免追尾責任（罰時 5–10 秒）
+function gapCost(r,T){
+  if(!oppPred||!oppPred.length) return 0;
+  const fr=r.frames, me=fr[fr.length-1], ch=Math.cos(me.h), sh=Math.sin(me.h); let w=0;
+  for(const Pp of oppPred){
+    if(T>Math.min(2.2,Math.max(1.6,Pp.known*0.1))) continue;
+    const op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y, f=dx*ch+dy*sh, l=Math.abs(-dx*sh+dy*ch);
+    if(f<0||f>45||l>2.6) continue;
+    const need=8-(f+op.v*op.v/50-me.v*me.v/50);
+    if(need>0) w+=Math.min(60,need*3);
+  }
+  return Math.min(w,120)*DIFF[aiDifficulty].safe;
+}
+// 進攻：前方 4–45 m 有同線較慢的車時，選一側（優先彎道內線；已選就不改邊）、保持 3.4 m 側向間隔，提早錯線超車
+let atkCtx=null, laneLock=null;
+// 起跑直路終點：第一個曲率半徑 < 450 m 的位置再往前 90 m（煞車點）；在此之前 22 車守住各自車道
+function laneEnd(){ if(track.laneEnd!==undefined) return track.laneEnd; const c=track.curvature, a=track.arcLen; let e=a[a.length-1]*0.25;
+  for(let i=0;i<c.length;i++) if(c[i]<450){ e=Math.max(150,a[i]-90); break; } return (track.laneEnd=e); }
+function setAttack(p,d){
+  atkCtx=null; if(!d.atk||defCtx){ p.atkSide=0; return; }
+  const arc=track.arcLen, me=p.car, ml=signedLat(me); let tg=null;
+  for(const o of players){ if(o===p||o.car.fin) continue; const gap=arc[o.car.idx]-arc[me.idx];
+    if(gap>4&&gap<45&&Math.abs(signedLat(o.car)-ml)<3.6&&me.v>o.car.v-4&&(!tg||gap<tg.gap)) tg={o,gap}; }
+  if(!tg){ p.atkSide=0; return; }
+  const lim=track.halfWidths[me.idx]-2.4, lo=signedLat(tg.o.car);
+  let s=p.atkSide;
+  if(!s){ s=Math.abs(ml-lo)>1?Math.sign(ml-lo):(turnSide(me.idx)||(lo>0?-1:1)); if(Math.abs(lo+s*3.4)>lim) s=-s; p.atkSide=s; }
+  const tgt=clampNum(lo+s*3.4,-lim,lim);
+  // 目標側向走廊必須沒有其他車（前 45 m～後 12 m、側向 3 m 內），否則留在原線跟車，不擠進別人身旁
+  for(const o of players){ if(o===p||o===tg.o||o.car.fin) continue; const g2=arc[o.car.idx]-arc[me.idx];
+    if(g2>-12&&g2<45&&Math.abs(signedLat(o.car)-tgt)<3){ p.atkSide=0; return; } }
+  atkCtx={tgt, w:0.9*d.atk};
+}
+// 避撞：真的會車身重疊＝重罰；另加很窄的軟性間隔（已決策對手 0.5 m、未決策 0.9 m），只看 1.2 秒內，
+// 所以不會因為「靠近」就大幅閃避，但並排時會留出身位，不再互相擠壓側撞
+let avoidBoost=1;   // 修正階段把避撞權重調高
+function collisionCost(r,t0,dt,dur){
+  if(!oppPred||!oppPred.length) return 0;
+  const fr=r.frames; let tot=0;
+  for(const Pp of oppPred){
+    const kn=(Pp.o.ready&&Pp.o.cmd), M=fieldMode?(kn?0.8:1.2):(kn?0.5:0.9); let hit=0, prox=0;
+    for(let i=1;i<fr.length&&hit<90;i++){
+      const T=t0+i*dt; if(T>Math.min(1.5,Math.max(1.0,Pp.known*0.1))) break;
+      const me=fr[i], op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y; if(dx*dx+dy*dy>100) continue;
+      const A=carBox(me), B=carBox(op);
+      if(obbHit(A,B)){ hit=Math.max(hit,(dx*Math.cos(me.h)+dy*Math.sin(me.h)>2)?90:40); break; }
+      A.hl+=M; A.hw+=M; const q=obbHit(A,B); if(q) prox=Math.max(prox,q.d);
     }
+    tot+=hit+prox*(fieldMode?22:16);
   }
-  return Math.max(w[0],w[1]*0.5)*DIFF[aiDifficulty].avoid;
+  return tot*DIFF[aiDifficulty].avoid*Math.min(avoidBoost,1.5);
 }
-function aiScore(r,tOff){
-  if(r.ev){ r.pen=0; return r.sc=(r.ev.type==='finish' ? 1e6-r.ev.t*100 : -1e5); }
-  const c=r.car, cen=track.center, i0=Math.max(0,c.idx-1), i1=Math.min(cen.length-1,c.idx+1);
+// 防守：有車從後方逼近時，鎖定一側（對手所在側；正對後方則取下個彎的內線）並佔住該側，不左右擺動（F1 只准一次防守移動）
+function signedLat(c){
+  const cen=track.center, i0=Math.max(0,c.idx-1), i1=Math.min(cen.length-1,c.idx+1);
+  let tx=cen[i1].x-cen[i0].x, ty=cen[i1].y-cen[i0].y; const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
+  return (c.x-cen[c.idx].x)*(-ty)+(c.y-cen[c.idx].y)*tx;
+}
+function turnSide(i){
+  const cen=track.center, n=cen.length, a=cen[i], b=cen[Math.min(n-1,i+8)], c=cen[Math.min(n-1,i+20)];
+  const cr=(b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x); return cr>0.5?1:cr<-0.5?-1:0;
+}
+function setDefense(p,d){
+  defCtx=null; if(!d.def) return;
+  const arc=track.arcLen, me=p.car; let th=null;
+  for(const o of players){ if(o===p||o.car.fin) continue; const gap=arc[me.idx]-arc[o.car.idx];
+    if(gap>2&&gap<25+Math.max(0,o.car.v-me.v)*3&&o.car.v>me.v-6&&(!th||gap<th.gap)) th={o,gap}; }
+  if(!th){ p.defSide=0; return; }
+  if(!p.defSide){ const ls=signedLat(th.o.car); p.defSide=(Math.abs(ls)>1.2?Math.sign(ls):turnSide(me.idx))||1; }
+  defCtx={side:p.defSide, tgt:Math.min(track.halfWidths[me.idx]*0.5,4), w:d.def};
+}
+// 尾流獎勵：預測會跟在對手正後方（3–35 m、側向 2.2 m 內）時給予獎勵（減阻、利於超車）
+function draftGain(r,T){
+  if(!oppPred||!oppPred.length) return 0;
+  const fr=r.frames, me=fr[fr.length-1]; if(me.v<35) return 0;
+  let g=0;
+  for(const Pp of oppPred){ const op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y,
+    f=dx*Math.cos(me.h)+dy*Math.sin(me.h), l=Math.abs(-dx*Math.sin(me.h)+dy*Math.cos(me.h));
+    if(f>3&&f<35&&l<2.2) g=Math.max(g,(1-f/35)*(1-l/2.2)); }
+  return g*8;
+}
+// 單步罰分：出界輪數、賽道界限違規／罰時、偏離中線（只在近邊緣時重罰）、車頭偏差、超出速度剖面、真實會撞
+function aiCost(r,t0,dur,dt){
+  const c=r.car, cen=track.center, i0=Math.max(0,c.idx-1), i1=Math.min(cen.length-1,c.idx+1), T=t0+dur;
   const tang=Math.atan2(cen[i1].y-cen[i0].y, cen[i1].x-cen[i0].x);
   const ang=Math.abs(((c.h-tang+Math.PI*3)%(Math.PI*2))-Math.PI);
-  const ov=overspeed(c);
-  r.pen=c.nOut*30 + c.lat*0.6 + ang*5 + ov*ov*3 + collisionCost(r,tOff);   // 每一步都累計罰分（含避撞）
-  return r.sc=track.arcLen[c.idx]-r.pen;
+  const edge=Math.max(0,c.lat-(track.halfWidths[c.idx]-2.5)), ov=Math.max(0,c.v-track.vlim[c.idx]*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8));
+  const dc=defCtx?defCtx.w*Math.max(0,Math.abs(signedLat(c)-defCtx.side*defCtx.tgt)-1):0;
+  let lt=atkCtx?atkCtx.tgt:track.rl[c.idx], lw=atkCtx?atkCtx.w:(oppPred&&oppPred.length>=2?0.18:0.4);
+  if(laneLock!==null&&!atkCtx){ lt=laneLock; lw=0.5; }
+  else if(packLat!==null&&!atkCtx){ lt=track.rl[c.idx]+(packLat-track.rl[c.idx])*packW; lw=0.4+0.35*packW; }
+  // 狀態類罰分以「每秒」計（乘 dur），事件類（違規、罰時、預測碰撞）不縮放
+  const st=dc + c.nOut*160 + Math.abs(signedLat(c)-lt)*lw + edge*edge*14 + ang*4 + Math.abs(c.vy||0)*0.8 + ov*ov*6 + gapCost(r,T)*0.4 - draftGain(r,T);
+  return st*dur + r.nv*600 + r.np*700 + collisionCost(r,t0,dt,dur);
 }
-const THR_F=[-1,-.5,0,.4,.7,1], STR_F=[-1,-.5,-.2,0,.2,.5,1], THR_S=[-1,0,.5,1], STR_S=[-1,-.35,0,.35,1];
-function expand(c,full,tOff){
-  const out=[];
-  for(const thr of full?THR_F:THR_S) for(const str of full?STR_F:STR_S){
-    const r=simulate(c,{thr,str},0.1,10,true); r.sc=aiScore(r,tOff||0); r.cmd={thr,str}; out.push(r);
+const THR_F=[-1,-.5,0,.4,.7,1], STR_F=[-1,-.5,-.25,-.1,-.04,0,.04,.1,.25,.5,1];
+const THR_S=[-1,-.4,0,.5,1], STR_S=[-1,-.4,-.12,-.03,0,.03,.12,.4,1], THR_C=[-1,0,.6,1];
+const DSTR=[-.08,-.025,.025,.08];
+// 純追蹤（pure pursuit）：算出「朝賽車線前方 Ld 米處」所需的轉向量，作為 beam search 的穩定候選，避免粗糙的左右急打
+// 目前可用的抓地力（m/s²）：與 stepCar 相同的公式（下壓力、路面、輪胎磨耗、尾流）
+function gripOf(c){ const v=c.v, dr=v>35?(c.dr||0):0; return 9.8*(CAR.MU0+CAR.DF*(1-1.2*dr)*v*v)*(c.gs===undefined?1:c.gs)*(1-0.2*Math.min(1,c.tw||0)); }
+let PURSUIT_KD=0.5;
+function pursuitStr(c,extra){
+  const v=Math.max(Math.hypot(c.v,c.vy||0),3), Ld=clampNum(5+0.5*v,10,50), n=track.center.length, t=trackAt(track.arcLen[c.idx]+Ld), i2=Math.min(n-1,c.idx+Math.round(Ld/4));
+  let off=defCtx?defCtx.side*defCtx.tgt:(atkCtx?atkCtx.tgt:(laneLock!==null?laneLock:(packLat!==null?track.rl[i2]+(packLat-track.rl[i2])*packW:track.rl[i2])));
+  const lim=track.halfWidths[i2]-2.4; off=clampNum(off+(extra||0),-lim,lim);
+  // 橫向目標漸進：每個前瞻距離最多橫移 28%（≈16° 切入角），不再一次橫移好幾米而把車頭打歪；衝出賽道後也是平順切回
+  const lat0=signedLat(c); off=clampNum(off,lat0-0.28*Ld,lat0+0.28*Ld);
+  const px=t.x-t.ty*off, py=t.y+t.tx*off, rx=c.x-Math.cos(c.h)*CAR.L/2, ry=c.y-Math.sin(c.h)*CAR.L/2, dx=px-rx, dy=py-ry, dd=Math.hypot(dx,dy)||1;
+  let a=Math.atan2(dy,dx)-c.h; a=Math.atan2(Math.sin(a),Math.cos(a));
+  let delta=Math.atan(CAR.L*2*Math.sin(a)/dd);
+  { const dEq=Math.atan(CAR.L*(c.yr||0)/v); delta+=PURSUIT_KD*(delta-dEq); }   // 偏航角速度回饋：車身轉得比目標慢就多打、轉得過快就回正（阻尼，防止高速擺尾）
+  // 方向盤上限：只打到輪胎給得出來的橫向加速度（95% 抓地力），不再打滿舵造成推頭／衝出
+  const dmax=Math.atan(0.95*gripOf(c)*CAR.L/(v*v)), sgn=steerGain(v), smax=Math.min(1,dmax/sgn);
+  return clampNum(delta/sgn,-smax,smax);
+}
+function strCands(prev){ const o=STR_S.slice(); for(const d of DSTR){ const x=Math.round(clampNum(prev+d,-1,1)*1000)/1000; if(!o.some(y=>Math.abs(y-x)<0.012)) o.push(x); } return o; }
+const latA=(s,v)=>v*v/CAR.L*Math.tan(s*steerGain(v));
+// 巨集策略搜尋：每個候選＝「純追蹤轉向（可加橫向偏移）＋依彎道速度剖面控速（可乘速度係數）」，
+// 以真實物理逐 0.1 s 推演整個前瞻時間並計分（出界、碰撞、安全車距、進度）。附近沒有對手時只推演預設策略；
+// 有對手時才多試幾種橫向偏移／減速，因此不會再自行「探索」衝出賽道或亂打方向的動作。
+// 跟車限速（限制「逼近速度」）：前車的位置、速度取自它公布的意圖（精確），我與它決策時刻相同、煞車能力相當，
+// 所以只要不比它快太多、且保留身位（車長＋0.1 s 車距），即使它下一步全力煞車我也停得下來：v ≤ √(v前²＋2a·間距)。
+// （舊版加了 0.25 s 反應距離，起跑格 8 m 的排距會一排比一排慢，後排幾乎停住）
+function followCap(c,T){
+  if(!oppPred||!oppPred.length) return 1e9;
+  const ch=Math.cos(c.h), sh=Math.sin(c.h), a=Math.max(8,0.7*Math.min(CAR.BMAX,gripOf(c))); let cap=1e9;
+  for(const Pp of oppPred){ if(T>Math.min(2.2,Math.max(1.6,Pp.known*0.1))) continue;
+    const op=oppAt(Pp,T), dx=op.x-c.x, dy=op.y-c.y, fw=dx*ch+dy*sh, lt=Math.abs(-dx*sh+dy*ch);
+    if(fw<3||fw>70||lt>(fieldMode?3.0:2.5)) continue;
+    const gap=Math.max(0,fw-6.5-0.1*c.v)+1.5; cap=Math.min(cap,Math.sqrt(2*a*gap+op.v*op.v)); }   // +1.5 m：前車指令已知，留一點寬裕讓後車能跟上它的加速
+  return cap;
+}
+// 同一個彎，內線的實際半徑較小、外線較大：以車身所在橫向位置修正彎道極速（只在多車模式啟用，避免外線車衝出、內線車過慢被追撞）
+function radiusFac(c,i){
+  const R=track.curvature[i]; if(!isFinite(R)||R>600) return 1;
+  const s=turnSide(i); if(!s) return 1;
+  const Re=clampNum(R-signedLat(c)*s,0.6*R,1.5*R);
+  return clampNum(Math.sqrt(Re/R),0.9,1.05);
+}
+function profThr(c,f,T){
+  const n=track.vlim.length, i=Math.min(n-1,c.idx+Math.round(c.v*0.5/4)); let vt=Math.min(track.vlim[c.idx],track.vlim[i])*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8)*(1-0.4*(c.dr||0))*f*Math.sqrt(clampNum(c.gs===undefined?1:c.gs,0.3,1));
+  if(fieldMode) vt*=radiusFac(c,i);
+  vt=Math.min(vt,followCap(c,T||0));
+  return clampNum((vt-c.v)*0.6,-1,1);
+}
+// 並排車數：前後 12 m 內、橫向相距 1.2–6.5 m 的車（會側撞的鄰居；同線前後車由跟車限速處理，不算）
+function sideCount(p){
+  const arc=track.arcLen, me=p.car, ml=signedLat(me); let n=0;
+  for(const o of players){ if(o===p||o.car.fin) continue; const g=arc[o.car.idx]-arc[me.idx]; if(g<=-12||g>=12) continue;
+    const dl=Math.abs(signedLat(o.car)-ml); if(dl>=1.2&&dl<6.5) n++; }
+  return n;
+}
+function aiSearch(p,d){
+  ensureProfile(); const arc=track.arcLen, c0={...p.car}; c0.lat=0;
+  const K=Math.max(1,Math.round(STEP_T/AI_FINE)), crowd=nAI>5, hz=Math.max(crowd?Math.min(d.horizon,3):d.horizon,K*AI_FINE+0.5), nS=Math.round(hz/AI_FINE);
+  oppPred=buildOppPred(p,nS+2);
+  laneLock=(gridMode&&p.lane!==undefined&&arc[p.car.idx]<laneEnd())?p.lane:null;
+  fieldMode=players.length>=6; packLat=null; packW=0;
+  const side=(fieldMode&&laneLock===null)?sideCount(p):0;
+  if(laneLock!==null||side>=2){ defCtx=null; atkCtx=null; p.atkSide=0; p.defSide=0; } else { setDefense(p,d); setAttack(p,d); }
+  if(side>=1&&!defCtx&&!atkCtx){ const lim=track.halfWidths[p.car.idx]-3.0; packLat=clampNum(signedLat(p.car),-lim,lim); packW=side>=2?1:0.5; }   // 車群守線：旁邊有車就維持目前橫向位置
+  const near=oppPred.length>0, offs=near?(packLat!==null?[0,1.5,-1.5]:[0,2.5,-2.5,5,-5]):[0], facs=near?[1,0.8,0.6,0.3]:[1];
+  let best=null;
+  for(const dof of offs) for(const f of facs){
+    let c={...c0}, acc=0, fin=false; const seq=[];
+    for(let s=0;s<nS;s++){
+      const str=pursuitStr(c,dof); let thr=profThr(c,f,s*AI_FINE);
+      { const g=gripOf(c), fl=Math.sqrt(Math.max(0,1-Math.pow(Math.min(1,Math.max(Math.abs(latA(str,Math.max(c.v,1))),Math.abs(c.v*(c.yr||0)))/(0.95*g)),2)));   // 轉向用掉抓地力後，剩下可用於加減速的比例
+        thr=thr<0?Math.max(thr,-0.8*fl*g/CAR.BMAX):Math.min(thr,0.6*fl*fl*g/Math.max(1,Math.min(CAR.AMAX,CAR.PWR/Math.max(c.v,5)))); }   // 後輪驅動：給油只能用掉後軸剩下的抓地力（彎中少給油才不會推尾）
+      seq.push({thr,str});
+      const r=simulate(c,{thr,str},DT,5,true);
+      if(r.ev){ fin=r.ev.type==='finish'; c=r.car; acc-=fin?1e5-s:0; break; }
+      const k=r.car; r.nv=(k.viol||0)-(c.viol||0); r.np=(k.pen||0)-(c.pen||0);
+      acc+=aiCost(r,s*AI_FINE,AI_FINE,DT)*Math.pow(0.93,s*AI_FINE)+(dof?Math.abs(dof)*0.3:0)+(1-f)*8; c=k;
+    }
+    const sc=arc[c.idx]+Math.min(c.v,track.vlim[c.idx])*1.5-acc;
+    if(!best||sc>best.sc) best={sc,seq};
   }
-  return out.sort((a,b)=>b.sc-a.sc);
+  return {seq:best.seq.slice(0,K), plan:best.seq};
 }
-function deepValue(r,depth,beam,tOff){
-  if(r.ev||depth<=0) return r.sc;
-  const kids=expand(r.car,false,tOff).slice(0,beam); let best=-Infinity;
-  for(const k of kids){ const v=deepValue(k,depth-1,beam,tOff+1); if(v>best) best=v; }
-  return best-r.pen*0.7;
+function makeCmd(b,d,noisy){
+  let nth=1, nst=1; if(noisy&&d.noise){ nth=1-Math.random()*d.noise*1.5; nst=1+(Math.random()*2-1)*d.noise*0.5; }   // 雜訊只會「少給」油門／煞車（動態模型下多給會直接超出抓地力、甩尾）
+  const seq=b.seq.map(k=>{ let thr=k.thr*nth; if(thr>0) thr*=d.cap; return {thr,str:clampNum(k.str*nst,-1,1)}; });
+  return {thr:seq[0].thr,str:seq[0].str,seq,plan:b.plan,t:simClock};   // plan＝完整意圖（共享給其他車），t＝決策時間
 }
-function aiDecide(p){
+function applyCmd(p,cmd){ const l=cmd.seq[cmd.seq.length-1]; p.lastStr=l.str; p.lastThr=l.thr; p.stick={x:l.str,y:l.thr}; p.cmd=cmd; }
+let decCounter=0;
+function aiDecide(p,defer){
   if(phase!=='decide'||p.ready) return;
-  const d=DIFF[aiDifficulty], c={...p.car}; c.lat=0;
-  oppPred=buildOppPred(p,d.depth*10); const first=expand(c,true,0); let best=null,bv=-Infinity;
-  for(const r of first){ const v=deepValue(r,d.depth-1,d.beam,1); if(v>bv){bv=v;best=r;} }
-  let thr=best.cmd.thr, str=best.cmd.str;
-  if(d.noise){ thr+=(Math.random()*2-1)*d.noise*1.5; str+=(Math.random()*2-1)*d.noise; }
-  thr=clampNum(thr,-1,1); if(thr>0) thr*=d.cap; str=clampNum(str,-1,1);
-  p.stick={x:str,y:thr}; p.ready=true; p.cmd={thr,str};
+  const d=DIFF[aiDifficulty];
+  const b=(gridMode&&step===1&&p.car.v<2)?{seq:[{thr:1,str:0}]}:aiSearch(p,d);
+  applyCmd(p,makeCmd(b,d,true)); p.ready=true; p.decIdx=++decCounter;
   updatePanels();
-  if(players.every(q=>q.ready)) startSim();
+  if(!defer&&players.every(q=>q.ready)) startSim();
+}
+// ---- 修正階段：全部 AI 決策完後，用「真正的聯合物理」試跑一整步；若有車會相撞，就讓涉事的 AI 在知道所有人確切指令的情況下重新規劃 ----
+const REP_ROUNDS={easy:2,medium:5,hard:8};
+function cmdsNow(){ return players.map(p=>p.car.fin?{thr:0,str:0}:(p.ready&&p.cmd)?p.cmd:{thr:p.stick.y,str:p.stick.x,rev:p.rev}); }
+function trialJoint(){
+  const r=simulateJoint(cmdsNow(),SUB); let sc=0; const bad=new Map(), near=new Set();
+  r.hits.forEach(h=>{ if(h.power>1){ sc+=10+h.power*1.5; [h.a,h.b].forEach(i=>bad.set(i,(bad.get(i)||0)+1)); } });
+  r.viols.forEach(v=>{ sc+=v.col?25:(v.pen?30:12); });
+  // 近距離擦身（0.8 m 內）的軟性罰分：整體協商時鼓勵留出身位
+  const n=r.res.length;
+  for(let a=0;a<n;a++) for(let b2=a+1;b2<n;b2++){ const fa=r.res[a].frames, fb=r.res[b2].frames; if(Math.abs(fa[0].x-fb[0].x)>25||Math.abs(fa[0].y-fb[0].y)>25) continue;
+    for(let k=0;k<fa.length&&k<fb.length;k+=5){ const A=carBox(fa[k]), B=carBox(fb[k]); if(Math.abs(A.x-B.x)>8||Math.abs(A.y-B.y)>8) continue; A.hl+=0.8; A.hw+=0.8; if(obbHit(A,B)){ sc+=1.5; near.add(a); near.add(b2); } } }
+  return {sc,bad,near,r};
+}
+function emergencyCmds(p){
+  const K=Math.max(1,Math.round(STEP_T/AI_FINE)), mk=f=>{ const seq=[]; for(let i=0;i<K;i++) seq.push(f(i)); return {thr:seq[0].thr,str:seq[0].str,seq}; };
+  return [mk(()=>({thr:0,str:0})), mk(()=>({thr:-0.4,str:0})),
+          mk(i=>({thr:-0.6,str:i<3?0.25:0})), mk(i=>({thr:-0.6,str:i<3?-0.25:0})), mk(()=>({thr:-1,str:0}))];
+}
+function repairBegin(){ const d=aiDifficulty; return {best:trialJoint(), n:0, tried:new Map(), max:nAI>5?20:Math.max(1,REP_ROUNDS[d])}; }
+function repairStep(rp){   // 回傳 true＝還有下一輪
+  if(!rp.best.bad.size||rp.n>=rp.max) return false;
+  const cands=[...rp.best.bad.keys()].map(i=>players[i]).filter(p=>p&&p.isAI&&!p.car.fin&&p.ready&&(rp.tried.get(p)||0)<3)
+    .sort((a,b)=>(a.decIdx||0)-(b.decIdx||0));   // 先動較早決策者（當時看不到後面的車）
+  { const w=new Map(); rp.best.r.hits.forEach(h=>{ if(h.power<=1) return; const A=players[h.a], B=players[h.b]; if(!A||!B) return;
+      const f=(B.car.x-A.car.x)*Math.cos(A.car.h)+(B.car.y-A.car.y)*Math.sin(A.car.h), rear=f>0?A:B; w.set(rear,(w.get(rear)||0)+1); });   // 追撞時後車先修正（也是後車負責）
+    cands.sort((a,b)=>(w.get(b)||0)-(w.get(a)||0)); }
+  if(!cands.length) return false;
+  const p=cands[0], d=DIFF[aiDifficulty]; rp.tried.set(p,(rp.tried.get(p)||0)+1); rp.n++;
+  const old=p.cmd, oS=p.stick, oLS=p.lastStr, oLT=p.lastThr;
+  const revert=()=>{ p.cmd=old; p.stick=oS; p.lastStr=oLS; p.lastThr=oLT; };
+  avoidBoost=1.5; let nc=null; try{ nc=makeCmd(aiSearch(p,d),d,false); }finally{ avoidBoost=1; }
+  applyCmd(p,nc); let t=trialJoint();
+  if(t.sc<rp.best.sc) rp.best=t; else revert();
+  if(rp.best.bad.has(p.id)){ for(const alt of emergencyCmds(p)){ const keep={cmd:p.cmd,stick:p.stick,ls:p.lastStr,lt:p.lastThr}; applyCmd(p,alt); const t2=trialJoint();
+      if(t2.sc<rp.best.sc) rp.best=t2; else { p.cmd=keep.cmd; p.stick=keep.stick; p.lastStr=keep.ls; p.lastThr=keep.lt; } } }
+  return true;
+}
+// ---- 協商階段：每台車先各自決策完（只看得到前面車的指令），然後前→後再「談一輪」：
+// 每台車在知道所有人這一步指令的情況下重新規劃，只有讓整體更安全（碰撞、犯規、近距離擦身更少）才採用新計畫
+function negotiateBegin(){ const arc=track.arcLen;
+  const best=trialJoint();   // 只有「碰撞或近距離擦身」牽涉到的車才需要再談，其他車沿用原計畫（省計算）
+  return {list:players.filter(p=>p.isAI&&!p.car.fin&&p.ready&&p.cmd&&(best.bad.has(p.id)||best.near.has(p.id))).sort((a,b)=>arc[b.car.idx]-arc[a.car.idx]), best, i:0}; }
+function negotiateStep(ng){   // 回傳 true＝還有下一台
+  while(ng.i<ng.list.length){
+    const p=ng.list[ng.i++];
+    if(!players.some(o=>o!==p&&!o.car.fin&&dist(o.car,p.car)<45)) continue;   // 附近沒車就不用談
+    const d=DIFF[aiDifficulty], old=p.cmd, oS=p.stick, oLS=p.lastStr, oLT=p.lastThr;
+    const nc=makeCmd(aiSearch(p,d),d,false); applyCmd(p,nc); const t=trialJoint();
+    if(t.sc<ng.best.sc) ng.best=t; else { p.cmd=old; p.stick=oS; p.lastStr=oLS; p.lastThr=oLT; }
+    return true;
+  }
+  return false;
+}
+function aiNegotiate(done){
+  const tok=aiTok; if(players.filter(p=>p.isAI&&!p.car.fin).length<3){ done(); return; }
+  const ng=negotiateBegin();
+  (function go(){ if(tok!==aiTok||phase!=='decide'||gameOver) return; if(negotiateStep(ng)) setTimeout(go,0); else done(); })();
+}
+function aiRepair(done){
+  const tok=aiTok, rp=repairBegin();
+  (function go(){ if(tok!==aiTok||phase!=='decide'||gameOver) return; if(repairStep(rp)) setTimeout(go,0); else done(); })();
 }
 
 // ---------- 主迴圈 / 繪製 ----------
@@ -700,27 +1122,37 @@ function loop(){
     document.getElementById('phaseBadge').textContent='決策中 '+(rem/1000).toFixed(1)+'s';
     if(rem<=0){ players.forEach(p=>{ if(!p.isAI) setReady(p); else if(!p.ready) aiDecide(p); }); }
   } else if(phase==='sim'){
-    bar.style.width=((1-(now-simStart)/1000)*100)+'%';
-    if(now-simStart>=1000) finishSim();
+    bar.style.width=((1-(now-simStart)/(simDur*1000))*100)+'%';
+    const it=insertTime(), ib=document.getElementById('btnInsert'), sm=ib.querySelector('small');
+    ib.classList.toggle('dim',it===null); sm.textContent=it===null?'本步即將結束':'在 t = '+(simClock+it).toFixed(1)+' s 停下並重新決策';
+    if(now-simStart>=simDur*1000) finishSim();
   } else if(phase==='replay'&&replay){
     if(replay.playing&&!replay.scrub){ replay.t+=dt*replay.speed; if(replay.t>=replay.total){ replay.t=replay.total; replay.playing=false; rpPlay.textContent='▶'; } }
     if(!replay.scrub) rpSlider.value=replay.t/replay.total*1000;
-    rpTime.textContent=replay.t.toFixed(1)+' / '+replay.total+' s';
+    rpTime.textContent=replay.t.toFixed(1)+' / '+replay.total.toFixed(1)+' s';
     document.getElementById('timeBadge').textContent='t = '+replay.t.toFixed(1)+' s';
     bar.style.width=(100-replay.t/replay.total*100)+'%'; bar.style.background='var(--accent)';
   }
   players.forEach(p=>{
-    const v=carView(p); document.getElementById('spd'+p.id).textContent=Math.round(v.v*3.6);
+    const v=carView(p); const se=document.getElementById('spd'+p.id); if(se) se.textContent=Math.round(Math.hypot(v.v,v.vy||0)*3.6);
     const tg=phase==='decide'?p.stick.x:(v.ss||0);           // 方向盤：決策時跟搖桿，模擬／重播時跟實際轉向
     p.wheel+=(tg-p.wheel)*Math.min(1,dt*14);
-    document.getElementById('wheel'+p.id).firstChild.style.transform='rotate('+(p.wheel*100).toFixed(1)+'deg)';
+    const we=document.getElementById('wheel'+p.id); if(we) we.firstChild.style.transform='rotate('+(p.wheel*100).toFixed(1)+'deg)';
   });
+  if(players.length>2) updateBoard();
   draw();
   requestAnimationFrame(loop);
 }
+let boardT=0;
+function updateBoard(){
+  const now=performance.now(); if(now-boardT<120) return; boardT=now;
+  const arc=track.arcLen, adj=p=>p.finT+(p.car.pen||0);
+  const rows=players.map(p=>{ const v=carView(p); return {p,v,key:p.car.fin?1e9-adj(p):arc[globalNearest(v).idx]}; }).sort((a,b)=>b.key-a.key);
+  document.getElementById('board').innerHTML=rows.map((r,i)=>(i+1)+'. <span style="color:'+r.p.color+'">●</span> '+(r.p.id===0?'<b>'+pname(r.p)+'</b>':pname(r.p))+' '+Math.round(Math.hypot(r.v.v,r.v.vy||0)*3.6)+' km/h'+(r.p.car.pen?' <span style="color:#ff7b7b">+'+r.p.car.pen+'s</span>':'')+(r.p.car.fin?' 🏁':'')).join('<br>');
+}
 function interp(f,k){
   k=clampNum(k,0,f.length-1); const i=Math.floor(k), j=Math.min(i+1,f.length-1), u=k-i, a=f[i], b=f[j];
-  return {x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u, h:a.h+(b.h-a.h)*u, v:a.v+(b.v-a.v)*u, ss:a.ss+(b.ss-a.ss)*u, k:i};
+  return {x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u, h:a.h+(b.h-a.h)*u, v:a.v+(b.v-a.v)*u, vy:(a.vy||0)+((b.vy||0)-(a.vy||0))*u, ss:a.ss+(b.ss-a.ss)*u, k:i};
 }
 function carView(p){
   if(phase==='replay'&&replay) return interp(replay.flat[p.id],replay.t/DT);
@@ -749,13 +1181,14 @@ function draw(){
   ctx.closePath(); ctx.fillStyle='rgba(60,90,70,0.55)'; ctx.fill();
   [track.left,track.right].forEach(cu=>pathLine(cu,'#e8c15a',2.5));
   drawGate(track.startGate,'#5ad1ff'); drawGate(track.finishGate,'#ff5d5d');
+  if(gridMode&&track.grid) drawGridSlots();
 
   players.forEach((p,i)=>{
     let pts, marks=p.marks;
     if(inRp){
       const f=replay.flat[i], kk=Math.min(f.length-1,Math.floor(replay.t/DT)); pts=[];
       for(let n=0;n<=kk;n+=3) pts.push(f[n]); pts.push(views[i]);
-      marks=[]; for(let s=1;s*SUB<=kk;s++) marks.push(f[s*SUB]);
+      marks=replay.bounds[i].filter(b=>b<=kk).map(b=>f[b]);
     } else {
       pts=p.trail.slice();
       if(phase==='sim'&&p.sim){ const f=p.sim.frames, k=views[i].k; for(let n=0;n<=k;n+=2) pts.push(f[n]); pts.push(views[i]); }
@@ -764,13 +1197,14 @@ function draw(){
     marks.forEach(m=>{ const q=toPx(m.x,m.y); ctx.beginPath(); ctx.arc(q.x,q.y,3.5,0,7); ctx.fillStyle=p.color; ctx.fill(); ctx.strokeStyle='#0c1119'; ctx.lineWidth=1; ctx.stroke(); });
     if(phase==='decide'&&!p.isAI&&p.preview){
       const fr=p.preview.frames; pathLine(fr,'rgba(255,255,255,0.85)',2,[5,4]);
-      const e=toPx(fr[fr.length-1].x,fr[fr.length-1].y);
-      ctx.beginPath(); ctx.arc(e.x,e.y,7,0,7); ctx.fillStyle=p.preview.ev&&p.preview.ev.type==='crash'?'rgba(255,60,60,.8)':'rgba(255,255,255,.35)'; ctx.fill(); ctx.strokeStyle=p.color; ctx.lineWidth=2; ctx.stroke();
+      drawGhosts(p);
     }
   });
   // 碰撞痕跡（橘色 ✕）
   (inRp?replay.hits.filter(h=>h.t<=replay.t):hitMarks).forEach(h=>{ const q=toPx(h.x,h.y); ctx.strokeStyle='#ff9a3c'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(q.x-5,q.y-5); ctx.lineTo(q.x+5,q.y+5); ctx.moveTo(q.x+5,q.y-5); ctx.lineTo(q.x-5,q.y+5); ctx.stroke(); });
   players.forEach((p,i)=>drawCar(views[i],p.color,p.wheel));
+  if(gridMode&&scale>=1.6) players.forEach((p,i)=>{ const q=toPx(views[i].x,views[i].y), t=p.id===0?'YOU':String(p.id);
+    ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.lineWidth=3; ctx.strokeStyle='#0c1119'; ctx.strokeText(t,q.x,q.y-16); ctx.fillStyle=p.id===0?'#fff':p.color; ctx.fillText(t,q.x,q.y-16); });
   // 碰撞特效：衝擊環、火花、文字
   fxs.forEach(({h,age})=>{
     const q=toPx(h.x,h.y);
@@ -782,6 +1216,28 @@ function draw(){
     ctx.font='bold 18px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.fillText('💥 碰撞！',q.x,q.y-22-age*20);
     ctx.restore();
   });
+  (inRp?replay.viols:curViols).forEach(v=>{ if(T<0) return; const age=T-v.t; if(age<0||age>=1.6) return; const q=toPx(v.x,v.y);
+    ctx.save(); ctx.globalAlpha=1-age/1.6; ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.fillStyle=v.pen?'#ff5964':'#ffd45a';
+    ctx.fillText(v.col?'⚠ 碰撞責任 罰時 +'+v.pen+'s':(v.pen?'⚠ 超出賽道 罰時 +'+v.pen+'s':'⚠ 超出賽道 警告 '+v.n+'/3'),q.x,q.y-26-age*18); ctx.restore(); });
+  ctx.restore();
+}
+// 決策預覽：沿預測軌跡畫出 4 個半透明車影（25/50/75/100%），車頭方向＝車身朝向，黃色箭頭＝實際行進方向，
+// 兩者夾角就是側滑。白＝穩定、橙＝側滑角 > 6°、紅＝輪胎已過峰值（打滑）或四輪出界
+function drawGhosts(p){
+  const fr=p.preview.frames, n=fr.length-1, out=p.preview.car.nOut>=4;
+  [0.25,0.5,0.75,1].forEach((u,j)=>{
+    const f=fr[Math.max(1,Math.round(n*u))]||fr[n], beta=Math.abs(Math.atan2(f.vy||0,Math.max(Math.abs(f.v),2)));
+    const bad=f.sl||(j===3&&out), col=bad?'#ff3b3b':(beta>0.1?'#ffb23c':p.color);
+    ctx.save(); ctx.globalAlpha=j===3?0.85:0.32; drawCar(f,col,f.ss); ctx.restore();
+    if(j>=2){ const q=toPx(f.x,f.y), sp=Math.hypot(f.v,f.vy||0), ang=f.h+Math.atan2(f.vy||0,f.v), L=Math.min(40,5+0.3*sp)*Math.max(scale,3);
+      ctx.save(); ctx.globalAlpha=j===3?0.95:0.5; ctx.strokeStyle='#ffe14a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(q.x,q.y); ctx.lineTo(q.x+Math.cos(ang)*L,q.y+Math.sin(ang)*L); ctx.stroke(); ctx.restore(); }
+  });
+}
+function drawGridSlots(){
+  ctx.save(); ctx.strokeStyle='rgba(255,255,255,.6)'; const lw=Math.max(1.4/scale,0.16);
+  for(const g of track.grid){ const q=toPx(g.x,g.y); ctx.save(); ctx.translate(q.x,q.y); ctx.rotate(g.h); ctx.scale(scale,scale); ctx.lineWidth=lw; ctx.strokeRect(-3.6,-1.4,6.6,2.8); ctx.restore(); }
+  if(scale>=2.5){ ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,.75)';
+    for(const g of track.grid){ const q=toPx(g.x-Math.cos(g.h)*4.8,g.y-Math.sin(g.h)*4.8); ctx.fillText('P'+(g.k+1),q.x,q.y+3); } }
   ctx.restore();
 }
 function drawCar(v,color,wheel){
@@ -801,6 +1257,7 @@ function drawCar(v,color,wheel){
   ctx.fillRect(2.4,-0.95,0.4,1.9); ctx.fillRect(-2.9,-0.7,0.4,1.4);      // 前後尾翼
   ctx.fillStyle='#0c1119'; ctx.fillRect(-0.4,-0.2,0.9,0.4);               // 駕駛艙
   ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(-0.05,0,0.2,0,7); ctx.fill();   // 頭盔
+  ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.lineWidth=0.1; ctx.beginPath(); ctx.arc(-1.8,0,0.22,0,7); ctx.stroke();   // 轉向支點（後軸）
   ctx.save(); ctx.translate(0.4,0); ctx.rotate(st*1.6); ctx.fillStyle='#ddd'; ctx.fillRect(-0.06,-0.26,0.12,0.52); ctx.restore();  // 方向盤
   ctx.restore();
 }
@@ -839,16 +1296,35 @@ document.getElementById('btnFollow').onclick=function(){ follow=!follow; this.cl
 
 // ---------- 畫面切換 ----------
 const homeScreen=document.getElementById('homeScreen'), gameScreen=document.getElementById('gameScreen');
-document.getElementById('btnPvp').onclick=()=>{ mode='pvp'; showGame(); };
-document.getElementById('btnAi').onclick=()=>{ document.getElementById('diffBox').classList.add('show'); };
-document.getElementById('btnStartAi').onclick=()=>{ mode='ai'; showGame(); };
+document.getElementById('btnPvp').onclick=()=>{ mode='pvp'; gridMode=false; showGame(); };
+document.getElementById('btnAi').onclick=()=>{ document.getElementById('gridBox').style.display='none'; document.getElementById('diffBox').classList.add('show'); };
+document.getElementById('btnGrid').onclick=()=>{ document.getElementById('diffBox').classList.remove('show'); const g=document.getElementById('gridBox'); g.style.display=g.style.display==='flex'?'none':'flex'; };
+document.getElementById('btnStartAi').onclick=()=>{ mode='ai'; gridMode=false; nAI=parseInt(document.querySelector('#aiCountRow .sel').dataset.n); showGame(); };
+document.getElementById('btnStartGrid').onclick=()=>{ mode='ai'; gridMode=true; nAI=21; showGame(); };
 function bindSel(sel,fn){ document.querySelectorAll(sel).forEach(b=>b.onclick=()=>{ document.querySelectorAll(sel).forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); fn(b); }); }
-bindSel('#diffBox .diffBtn',b=>aiDifficulty=b.dataset.d);
+bindSel('#aiDiffRow .diffBtn',b=>aiDifficulty=b.dataset.d);
+bindSel('#aiCountRow .diffBtn',b=>nAI=parseInt(b.dataset.n));
+bindSel('#gDiffRow .diffBtn',b=>aiDifficulty=b.dataset.d);
+bindSel('#gPosRow .diffBtn',b=>gridPos=b.dataset.g);
+bindSel('#stepRow .diffBtn',b=>setStepT(parseFloat(b.dataset.t)));
+function setStepT(t){
+  STEP_T=t; SUB=Math.round(t/DT);
+  document.querySelectorAll('#stepRow .diffBtn').forEach(b=>b.classList.toggle('sel',parseFloat(b.dataset.t)===t));
+  document.getElementById('btnStepT').textContent='⏱ '+t.toFixed(1)+'s';
+  if(track&&phase==='decide'){
+    const al=[]; players.forEach(p=>{ if(p.isAI&&!p.car.fin){ p.ready=false; p.cmd=null; al.push(p); } else { updatePreview(p); renderStick(p); } });
+    if(al.length) setTimeout(()=>scheduleAI(al),30);
+    updatePanels();
+  }
+}
+document.getElementById('btnStepT').onclick=()=>setStepT(STEP_T===1?0.5:1);
 bindSel('#lengthRow .diffBtn',b=>{ useCustom=b.dataset.km==='custom'; if(!useCustom) trackKm=parseFloat(b.dataset.km); });
 document.getElementById('btnHome').onclick=goHome;
 document.getElementById('btnBackHome').onclick=goHome;
 document.getElementById('btnAgain').onclick=()=>{ document.getElementById('overlay').classList.remove('show'); initGame(); };
 document.getElementById('ok0').onclick=()=>setReady(players[0]);
+document.getElementById('gear0').onclick=()=>toggleGear(players[0]);
+document.getElementById('gear1').onclick=()=>toggleGear(players[1]);
 document.getElementById('ok1').onclick=()=>setReady(players[1]);
 function showGame(){
   homeScreen.style.display='none'; gameScreen.style.display='flex';
@@ -857,6 +1333,7 @@ function showGame(){
   requestAnimationFrame(()=>{ resizeCanvas(); initGame(); });
 }
 function goHome(){
+  gridToken++; aiTok++; document.getElementById('lights').classList.remove('show','go'); document.getElementById('gridBox').style.display='none';
   phase='idle'; track=null; players=[]; replay=null; replayBar.classList.remove('show'); gameScreen.style.display='none'; homeScreen.style.display='flex';
   document.getElementById('diffBox').classList.remove('show'); document.getElementById('overlay').classList.remove('show');
 }
@@ -868,9 +1345,10 @@ const rpPlay=document.getElementById('rpPlay'), rpSlider=document.getElementById
 const RP_SPEEDS=[0.25,0.5,1,2,4];
 function startReplay(){
   if(!history.length) return;
-  const flat=[0,1].map(k=>{ const arr=[]; history.forEach((h,si)=>{ const fr=h.frames[k]; for(let i=si===0?0:1;i<fr.length;i++) arr.push(fr[i]); }); return arr; });
+  const flat=players.map((_,k)=>{ const arr=[]; history.forEach((h,si)=>{ const fr=h.frames[k]; for(let i=si===0?0:1;i<fr.length;i++) arr.push(fr[i]); }); return arr; });
   const hits=[]; history.forEach(h=>h.hits.forEach(x=>hits.push(x)));
-  replay={flat,hits,t:0,playing:true,speed:1,total:history.length,scrub:false};
+  const bounds=players.map((_,k)=>{ const b=[]; let n=0; history.forEach((h,si)=>{ n+=h.frames[k].length-(si===0?0:1); b.push(n-1); }); return b; });
+  replay={flat,hits,viols:history.flatMap(h=>h.viols||[]),bounds,t:0,playing:true,speed:1,total:Math.round((Math.max(...flat.map(f=>f.length))-1)*DT*10)/10,scrub:false};
   phase='replay'; players.forEach(p=>{ p.wheel=0; });
   document.getElementById('overlay').classList.remove('show'); replayBar.classList.add('show');
   rpPlay.textContent='⏸'; rpSpeed.textContent='1×'; updatePanels();
@@ -886,8 +1364,9 @@ rpSlider.addEventListener('input',()=>{ if(replay) replay.t=rpSlider.value/1000*
 rpSpeed.onclick=()=>{ if(!replay) return; const i=(RP_SPEEDS.indexOf(replay.speed)+1)%RP_SPEEDS.length; replay.speed=RP_SPEEDS[i]; rpSpeed.textContent=replay.speed+'×'; };
 document.getElementById('rpExit').onclick=exitReplay;
 document.getElementById('btnReplay').onclick=startReplay;
+document.getElementById('btnInsert').addEventListener('pointerdown',e=>{ e.preventDefault(); interruptStep(); });
 // 避免畫布的拖曳／縮放／touch preventDefault 吃掉重播列與結果視窗的操作
-['replayBar','overlay'].forEach(id=>{ const el=document.getElementById(id);
+['replayBar','overlay','btnInsert'].forEach(id=>{ const el=document.getElementById(id);
   ['mousedown','touchstart','touchmove','touchend','wheel'].forEach(n=>el.addEventListener(n,e=>e.stopPropagation(),{passive:true})); });
 
 // ================= 賽道編輯器 =================
