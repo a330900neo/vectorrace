@@ -103,7 +103,7 @@
 
 <div id="homeScreen">
   <h1>🏎️ F1 物理賽車對戰</h1>
-  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 0.5 或 1.0 秒（可切換），雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑一步物理模擬；模擬途中可按大按鈕「插入決策」，在下一個 0.1 秒刻度立即停下、重新決策，不必等整步跑完。AI 以 0.1 秒為單位規劃操作，閃避更靈敏；支援倒車檔（按「D／R」鍵切換，車速低於 10 km/h 才會倒車）。車輛採用動態自行車模型：Pacejka 輪胎（側偏角產生側向力）、縱向載荷轉移、隨速度平方增加的下壓力、後輪驅動與摩擦橢圓，所以會有轉向不足、轉向過度與甩尾。四輪全出白線＝違反賽道界限（F1 規則：前 3 次警告，之後每次罰時 5 秒；場外護欄會把車帶回與賽道平行），造成碰撞者罰時（後車追尾或切入撞人：輕撞 5 秒、重撞 10 秒），最終以含罰時的成績決勝負；賽車之間會真實碰撞，賽後可重播整場。</p>
+  <p class="sub">真實 F1 尺度（賽道闊 14 m、起跑長直路、髮夾／高速彎／連續彎）。四輪全部越出白線才算出界。每一步 0.5 或 1.0 秒（可切換），雙方同時用搖桿設定加速／煞車與轉向（單位：秒、km/h），每步最多 8 秒決策；雙方都確認後同步跑一步物理模擬；模擬途中可按大按鈕「插入決策」，在下一個 0.1 秒刻度立即停下、重新決策，不必等整步跑完。AI 以 0.1 秒為單位規劃操作，閃避更靈敏；支援倒車檔（按「D／R」鍵切換，車速低於 10 km/h 才會倒車）。車輛採用動態自行車模型：Pacejka 輪胎（側偏角產生側向力）、縱向載荷轉移、隨速度平方增加的下壓力、後輪驅動與摩擦橢圓，所以會有轉向不足、轉向過度與甩尾。四輪全出白線＝違反賽道界限（F1 規則：前 3 次警告，之後每次罰時 5 秒；場外護欄會把車帶回與賽道平行），造成碰撞者罰時（後車追尾或切入撞人：輕撞 5 秒、重撞 10 秒），最終以含罰時的成績決勝負；賽車之間會真實碰撞，賽後可重播整場。<br>🟩 DRS：長直路設有 DRS 區（綠色），通過前方偵測線（虛線）時與前車相差 &lt; 1.0 秒即可在該區開啟 DRS（風阻 −14%，煞車即關，起跑 6 秒內不可用）。仿 F1 超車規則：後車車頭軸心超過前車後視鏡線才算並排、有權要求空間（前車須留位，否則前車負責；未並排就撲上去則後車負責）；防守只准移動一次、不可往回切、不可在煞車時橫移，違規各罰 5 秒。</p>
 
   <div style="display:flex;flex-direction:column;gap:14px;align-items:center;">
     <div>
@@ -145,6 +145,7 @@
     <div id="hint" style="font-size:.8em;color:var(--muted)">搖桿：上=加速 下=煞車 左右=轉向｜鍵盤 P1：WASD＋空白（R＝前進／倒車）　P2：方向鍵＋Enter（/＝前進／倒車）｜預覽車影：白＝穩定、橙＝側偏、紅＝打滑／出界｜模擬中按「⚡插入決策」（或空白／Enter）可在下一個 0.1s 刻度提前停下重新決策</div>
     <div class="spacer"></div>
     <button class="ctrlBtn" id="btnStepT">⏱ 1.0s</button>
+    <button class="ctrlBtn" id="btnDbg" title="顯示 AI 路徑搜尋（目標線、候選路徑、最佳路徑）">🐞 AI路徑</button>
     <button class="ctrlBtn" id="btnFollow">🎥 跟車</button>
     <button class="ctrlBtn" id="btnZoomOut">－</button>
     <button class="ctrlBtn" id="btnZoomIn">＋</button>
@@ -215,14 +216,19 @@ const M = 1;               // 1 unit = 1 米
 const DECIDE_MS = 8000;    // 每步最長決策時間
 const DT = 0.02; let STEP_T = 1, SUB = 50, simDur = 1, simClock = 0; // 每步 STEP_T 秒（0.5 或 1.0）= SUB 個 0.02s 物理子步
 const DIFF = {   // horizon＝前瞻秒數；W＝beam 寬度；avoid＝避撞權重
-  easy:   {horizon:2, W:6,  noise:0.15,  cap:0.75, avoid:0.5, atk:0,   safe:0.3},
-  medium: {horizon:3, W:14, noise:0.04, cap:1, avoid:1, atk:0.6, safe:0.7},
-  hard:   {horizon:6, W:30, noise:0,    cap:1, avoid:1.3, atk:1,   safe:1}
+  easy:   {horizon:2, W:6,  noise:0.15,  cap:0.75, avoid:0.5, atk:0.6, safe:0.3},
+  medium: {horizon:3, W:14, noise:0.04, cap:1, avoid:1, atk:1, safe:0.7},
+  hard:   {horizon:6, W:30, noise:0,    cap:1, avoid:1.3, atk:1.2, safe:1}
 };
+const DRS_T0=6;   // 起跑後 6 秒內不可開 DRS
 const AI_FINE=0.1;   // AI 決策解析度：每 0.1 秒一個操作（一步內可變化多次）
 // 取得某指令在第 i 個 0.1s 格的操作（AI 指令帶 seq 序列；人類指令是定值）
 function cmdAt(cmd,i){ return cmd&&cmd.seq?cmd.seq[Math.min(Math.max(0,i),cmd.seq.length-1)]:cmd; }
-DIFF.easy.def=0; DIFF.medium.def=1.5; DIFF.hard.def=3;   // 防守強度
+DIFF.easy.def=0; DIFF.medium.def=1.5; DIFF.hard.def=3;
+// follow＝預測前車「不會急煞」時，假設前車最大減速度佔我方煞車力的比例（越小＝敢貼越近）；tail/tailV＝跟車保留車距（m、每 m/s）；draft＝尾流獎勵倍率
+DIFF.easy.follow=1;   DIFF.easy.tail=6.5;   DIFF.easy.tailV=0.10; DIFF.easy.draft=1;
+DIFF.medium.follow=0.55; DIFF.medium.tail=6.0; DIFF.medium.tailV=0.08; DIFF.medium.draft=1.7;
+DIFF.hard.follow=0.38;   DIFF.hard.tail=5.7;   DIFF.hard.tailV=0.06; DIFF.hard.draft=2.4;   // 防守強度
 
 // F1 風格車輛參數（SI 單位：m, s）
 // 動態自行車模型（dynamic bicycle model）參數（SI 單位）
@@ -235,7 +241,7 @@ const steerGain=v=>CAR.DMAX/(1+(v/CAR.VS)*(v/CAR.VS));   // 方向盤全舵對�
 
 let track=null, players=[], step=0, phase='idle', deadline=0, simStart=0, gameOver=false, follow=false, running=false;
 let scale=6, offsetX=40, offsetY=40;
-let history=[], hitMarks=[], curHits=[], curViols=[], replay=null, lastFrame=0;
+let curDrsLog=null, history=[], hitMarks=[], curHits=[], curViols=[], replay=null, lastFrame=0;
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d'), wrap=document.getElementById('canvasWrap');
 function resizeCanvas(){ cv.width=wrap.clientWidth; cv.height=wrap.clientHeight; draw(); }
@@ -446,11 +452,11 @@ function stepCar(c, thr, str, dt){
   const nsub=Math.max(1,Math.ceil(dt/0.007)), h=dt/nsub;   // 輪胎剛度大，內部細分子步以保持數值穩定
   const M=CAR.M, A=CAR.A, B=CAR.B, L=CAR.L, ts=c.ts;
   const drf=Math.abs(c.v)>35?(c.dr||0):0, gk=(c.gs===undefined?1:c.gs)*(1-0.2*Math.min(1,c.tw||0));   // 尾流、路面與輪胎磨耗
-  const muF=CAR.MU0*gk, muR=muF*CAR.MUR, rrS=c.rr||0, kd=CAR.KD*(1-1.2*drf), dk=CAR.DRAG*M*(1-drf);
+  const ds=c.drs?1:0, muF=CAR.MU0*gk, muR=muF*CAR.MUR, rrS=c.rr||0, kd=CAR.KD*(1-1.2*drf)*(1-0.12*ds), dk=CAR.DRAG*M*(1-drf)*(1-0.14*ds);   // DRS：尾翼打開 → 風阻 −14%、下壓力 −12%
   const Wf=M*9.8*B/L, Wr=M*9.8*A/L;
   let vx=c.v, vy=c.vy||0, r=c.yr||0, x=c.x, y=c.y, hd=c.h, ax=c.ax||0, slipMax=0, use=0, axl=0;
   for(let k=0;k<nsub;k++){
-    const sp=Math.hypot(vx,vy), sg=Math.max(-1,Math.min(1,vx/1.5)), delta=c.ss*steerGain(sp);
+    const sp=Math.sqrt(vx*vx+vy*vy), sg=Math.max(-1,Math.min(1,vx/1.5)), delta=c.ss*steerGain(sp);
     const Fd=kd*sp*sp, dFz=M*ax*CAR.HCG/L;   // 加速→後軸加載，煞車→前軸加載
     const Fzf=Math.max(300,Wf+CAR.FDF*Fd-dFz), Fzr=Math.max(300,Wr+(1-CAR.FDF)*Fd+dFz), capF=muF*Fzf, capR=muR*Fzr;
     const rev=c.rev&&vx<3;   // 倒車檔：車速 < 3 m/s 才有效
@@ -474,7 +480,7 @@ function stepCar(c, thr, str, dt){
     const ayl=(Fyfb+Fyr-dk*sp*vy-rf*vy)/M;
     const dvx=axl+vy*r, dvy=ayl-vx*r, dr=(A*Fyfb-B*Fyr)/CAR.IZ;
     vx+=dvx*h; vy+=dvy*h; r+=dr*h; ax+=(axl-ax)*Math.min(1,h/0.04);
-    const w=clampNum((Math.hypot(vx,vy)-3)/4,0,1);   // 低速混入運動學模型
+    const w=clampNum((Math.sqrt(vx*vx+vy*vy)-3)/4,0,1);   // 低速混入運動學模型（Math.hypot 很慢，改用 sqrt，結果相同）
     if(w<1){ r=r*w+(vx/L*Math.tan(delta))*(1-w); vy*=w; }
     const hm=hd+0.5*r*h, ch=Math.cos(hm), sh=Math.sin(hm);
     x+=(vx*ch-vy*sh)*h; y+=(vx*sh+vy*ch)*h; hd+=r*h;
@@ -522,12 +528,37 @@ function barrier(c){
     if(out>0){ let d=Math.atan2(b.y-a.y,b.x-a.x)-c.h; d=Math.atan2(Math.sin(d),Math.cos(d)); c.h+=d*0.5; } }   // 只擋向外的轉向；往賽道內打方向可以自己駛離護欄
 }
 // 模擬 n 個子步；回傳終態、逐幀軌跡、過線事件
+// ---------- DRS（可變尾翼）----------
+// 規則仿 F1：賽道上的長直路設有 DRS 區；每區前方有一條偵測線，車通過偵測線時若與前一輛車相差 < 1.0 秒，就取得進入該區後開啟 DRS 的資格；
+// 開啟後直到離開該區或踩煞車為止。起跑後 6 秒內不可使用。
+function computeDRS(){
+  const c=track.curvature, a=track.arcLen, n=c.length, Z=[], str=x=>!isFinite(x)||x>=650; let i=0;
+  while(i<n){ if(!str(c[i])){ i++; continue; }
+    let j=i; while(j<n&&str(c[j])) j++;
+    const sa=a[i]+10, sb=a[j-1]-55, det=sa-90;
+    if(sb-sa>=180&&det>=120) Z.push({a:sa,b:sb,ds:det,ia:idxAtS(sa),ib:idxAtS(sb),di:idxAtS(det)});
+    i=j; }
+  return Z;
+}
+function drsUpdate(c,clock){
+  const Z=track.drs; if(!Z||!Z.length){ c.drs=false; return; }
+  const s=track.arcLen[c.idx]; let z=-1; for(let i=0;i<Z.length;i++) if(s>=Z[i].a&&s<=Z[i].b){ z=i; break; }
+  c.drs=(c.drsArm>=0&&z===c.drsArm&&clock>=DRS_T0&&c.ts>-0.05&&Math.abs(c.vy||0)<2);
+  if(c.drsArm>=0&&s>Z[c.drsArm].b) c.drsArm=-1;
+}
+function drsStep(c,k,pi,T,logs){   // 多車模擬中，每個 0.02 s 子步：偵測線計時＋更新 DRS 狀態
+  const Z=track.drs; if(!Z||!Z.length) return;
+  for(let z=0;z<Z.length;z++){ const D=Z[z];
+    if(pi<D.di&&c.idx>=D.di){ let tp=-1e9; for(const e of logs[z]) if(e.k!==k&&e.t<=T&&e.t>tp) tp=e.t;
+      if(T>=DRS_T0&&T-tp<1.0) c.drsArm=z; logs[z].push({k,t:T}); } }
+  drsUpdate(c,T);
+}
 function simulate(c0, cmd, dt, n, fast){
   const c={...c0}, frames=[{x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss,sl:0}]; let ev=null;
   const g0=track.finishGate[0], g1=track.finishGate[1];
   for(let i=1;i<=n;i++){
     const a={x:c.x,y:c.y};
-    c.rev=!!cmd.rev; stepCar(c, cmd.thr, cmd.str, dt); barrier(c);
+    c.rev=!!cmd.rev; stepCar(c, cmd.thr, cmd.str, dt); barrier(c); drsUpdate(c,simClock);
     frames.push({x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss,sl:c.slip>0?1:0});
     if(segIntersect(a,c,g0,g1)){ ev={type:'finish',t:i*dt}; break; }
     c.nOut=wheelsOut(c,fast); checkLimits(c);
@@ -571,17 +602,28 @@ function resolveCollision(a,b){
   return {x:h.px,y:h.py,power,nx:h.nx,ny:h.ny,v0a,v0b};
 }
 // 判責（仿 F1 steward）：前後相撞→後車負責；側向相撞→主動切入對方者負責；差不多則視為競賽事故（無責任）
+// 判責（仿 F1 駕駛標準指引）：
+//  ① 前後相撞 → 後車負責
+//  ② 側向接觸：「後車」車頭軸心超過「前車」後視鏡線（約半車身並排）才算已經並排、有權要求空間；
+//     已並排：前車橫移不留空間 → 前車負責；後車硬擠 → 後車負責；差不多 → 競賽事故
+//     未並排（俯衝式超車／晚煞車撲上去）→ 後車負責，除非前車明顯橫移擠壓
+let faultWhy='';
 function faultOf(h,ca,cb){
   const cen=track.center, i0=Math.max(0,ca.idx-1), i1=Math.min(cen.length-1,ca.idx+1);
   let tx=cen[i1].x-cen[i0].x, ty=cen[i1].y-cen[i0].y; const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
   const along=h.nx*tx+h.ny*ty;
-  if(Math.abs(along)>0.7) return along>0?0:1;
-  const ia=h.v0a.x*h.nx+h.v0a.y*h.ny, ib=-(h.v0b.x*h.nx+h.v0b.y*h.ny);
-  return ia-ib>0.8?0:(ib-ia>0.8?1:null);
+  if(Math.abs(along)>0.7){ faultWhy='追撞'; return along>0?0:1; }
+  const f=(cb.x-ca.x)*tx+(cb.y-ca.y)*ty, rearA=f>0, dd=Math.abs(f);
+  const ia=h.v0a.x*h.nx+h.v0a.y*h.ny, ib=-(h.v0b.x*h.nx+h.v0b.y*h.ny);   // A、B 朝對方橫移的速度分量
+  const rc=rearA?ia:ib, fc=rearA?ib:ia, R=rearA?0:1, F=rearA?1:0;
+  if(dd>1.4){ if(fc-rc>0.8){ faultWhy='前車橫移擠壓'; return F; } faultWhy='未並排強行超車（無權利）'; return R; }
+  if(fc-rc>0.8){ faultWhy='未留空間（已並排）'; return F; }
+  if(rc-fc>0.8){ faultWhy='擠壓前車'; return R; }
+  return null;
 }
 // 多車同步模擬（含兩兩碰撞、賽道界限）。已過線的車停在原地
 function simulateJoint(cmds,lim){
-  const n=players.length, cs=players.map(p=>({...p.car})), snap=c=>({x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss});
+  const logs=(track.drsLog||[]).map(a=>a.slice()), n=players.length, cs=players.map(p=>({...p.car})), snap=c=>({x:c.x,y:c.y,h:c.h,v:c.v,vy:c.vy||0,ss:c.ss});
   const fr=cs.map(c=>[snap(c)]), evs=cs.map(()=>null), hits=[], viols=[], g0=track.finishGate[0], g1=track.finishGate[1], last={};
   for(let i=1;i<=(lim||SUB);i++){
     const t=i*DT, slot=((i-1)/5)|0;
@@ -589,7 +631,7 @@ function simulateJoint(cmds,lim){
       cs.forEach((o,j)=>{ if(j===k||o.fin||o.v<25) return; const dx=o.x-c.x, dy=o.y-c.y, f=dx*Math.cos(c.h)+dy*Math.sin(c.h), l=Math.abs(-dx*Math.sin(c.h)+dy*Math.cos(c.h));
         if(f>3&&f<35&&l<2.2) best=Math.max(best,0.25*(1-f/35)*(1-l/2.2)); });
       c.dr=best; });
-    cs.forEach((c,k)=>{ if(c.fin) return; const a={x:c.x,y:c.y}; const cm=cmdAt(cmds[k],slot); c.rev=!!cm.rev; stepCar(c,cm.thr,cm.str,DT); barrier(c);
+    cs.forEach((c,k)=>{ if(c.fin) return; const a={x:c.x,y:c.y}; const cm=cmdAt(cmds[k],slot), pi=c.idx; c.rev=!!cm.rev; stepCar(c,cm.thr,cm.str,DT); barrier(c); drsStep(c,k,pi,simClock+t,logs);
       if(segIntersect(a,c,g0,g1)){ evs[k]={type:'finish',t}; c.fin=true; fr[k].push(snap(c)); } });
     for(let a=0;a<n;a++) for(let b=a+1;b<n;b++){ if(cs[a].fin||cs[b].fin) continue; if(Math.abs(cs[a].x-cs[b].x)>8||Math.abs(cs[a].y-cs[b].y)>8) continue;
       const h=resolveCollision(cs[a],cs[b]), key=a*8+b, lt=last[key]===undefined?-1:last[key];
@@ -597,18 +639,18 @@ function simulateJoint(cmds,lim){
         if(t-lt>=0.2){ hits.push({t,x:h.x,y:h.y,power:h.power,a,b}); last[key]=t; }
         const fk=h.power>=2?faultOf(h,cs[a],cs[b]):null;
         if(fk!==null){ const k=fk===0?a:b, c=cs[k], T=simClock+t;
-          if(c.colT===undefined||T-c.colT>=1.5){ const pen=h.power>=12?10:5; c.pen=(c.pen||0)+pen; c.colT=T; viols.push({t,k,n:0,pen,x:h.x,y:h.y,col:true}); } }
+          if(c.colT===undefined||T-c.colT>=1.5){ const pen=h.power>=12?10:5; c.pen=(c.pen||0)+pen; c.colT=T; viols.push({t,k,n:0,pen,x:h.x,y:h.y,col:true,why:faultWhy}); } }
       } }
     cs.forEach((c,k)=>{ if(c.fin) return; c.nOut=wheelsOut(c,false); const e=checkLimits(c);
       if(e) viols.push({t,k,n:c.viol,pen:e==='pen'?5:0,x:c.x,y:c.y}); fr[k].push(snap(c)); });
     if(cs.every(c=>c.fin)) break;
   }
-  return {res:cs.map((c,k)=>({car:c,frames:fr[k],ev:evs[k]})), hits, viols};
+  return {res:cs.map((c,k)=>({car:c,frames:fr[k],ev:evs[k]})), hits, viols, drsLog:logs};
 }
 
 // ---------- 遊戲流程 ----------
 function newPlayer(id,color,start,h,isAI){
-  return {id,color,isAI,rev:false, car:{x:start.x,y:start.y,h,v:0,vy:0,ts:0,ss:0,idx:0,slip:0,nOut:0,viol:0,pen:0,off:false,fin:false,tw:0,dr:0,gs:1,rr:0,yr:0}, stick:{x:0,y:0.6}, wheel:0,
+  return {id,color,isAI,rev:false, car:{x:start.x,y:start.y,h,v:0,vy:0,ts:0,ss:0,idx:0,slip:0,nOut:0,viol:0,pen:0,off:false,fin:false,tw:0,dr:0,gs:1,rr:0,yr:0,drs:false,drsArm:-1}, stick:{x:0,y:0.6}, wheel:0,
           trail:[{x:start.x,y:start.y}], marks:[], ready:false, cmd:null, sim:null, preview:null, finT:null};
 }
 // 沿中心線取弧長 s 處的位置／方向
@@ -629,6 +671,7 @@ function makeGrid(n){
 }
 function initGame(){
   track=(useCustom&&customTrack)?buildCustom():generateTrack();
+  track.drs=computeDRS(); track.drsLog=track.drs.map(()=>[]);
   const c1=getComputedStyle(document.documentElement).getPropertyValue('--p1').trim();
   const c2=getComputedStyle(document.documentElement).getPropertyValue('--p2').trim();
   const t=track.center[Math.min(3,track.center.length-1)], s=track.center[0];
@@ -670,11 +713,25 @@ function startLights(){
   })();
 }
 // AI 依賽道位置由前到後依序決策：後車能看到前車剛下的指令，預測更準；逐一排程避免卡住畫面
+const sleep0=()=>new Promise(r=>setTimeout(r,0)), sleepMs=ms=>new Promise(r=>setTimeout(r,ms));
+let aiRunning=0; const ABORT={abort:true};
 function scheduleAI(list){
   const tok=++aiTok, arc=track.arcLen; list=list.slice().sort((a,b)=>arc[b.car.idx]-arc[a.car.idx]);
   decCounter=0;
-  (function next(){ if(tok!==aiTok) return; const p=list.shift(); if(!p){ if(phase==='decide') aiNegotiate(()=>aiRepair(()=>{ if(phase==='decide'&&players.every(q=>q.ready)) startSim(); })); return; }
-    if(phase==='decide'&&!p.ready) aiDecide(p,true); setTimeout(next,0); })();
+  (async function next(){
+    while(aiRunning>0&&tok===aiTok) await sleepMs(2);   // 等舊的（已作廢的）搜尋結束，避免共用全域狀態被覆蓋
+    while(tok===aiTok&&phase==='decide'){
+      const p=list.shift();
+      if(!p){
+        await aiNegotiate(tok); await aiRepair(tok);
+        if(tok===aiTok&&phase==='decide'&&players.every(q=>q.ready)) await aiReactThenStart();
+        return;
+      }
+      while(p.thinking&&tok===aiTok) await sleepMs(2);
+      if(!p.ready) await aiDecide(p,tok,true);
+      await sleep0();   // 讓出主執行緒，畫面保持流暢
+    }
+  })();
 }
 function beginStep(){
   aiTok++; step++; phase='decide'; deadline=performance.now()+DECIDE_MS;
@@ -694,7 +751,7 @@ function interruptStep(){
   const T=insertTime(); if(T===null) return;
   const n=Math.round(T/DT), r=simulateJoint(players.map(p=>p.cmd),n);
   players.forEach((p,k)=>{ p.sim=r.res[k]; if(p.isAI&&p.cmd){ const l=cmdAt(p.cmd,Math.round(T/AI_FINE)-1); p.lastStr=l.str; p.lastThr=l.thr; } });
-  curHits=r.hits; curViols=r.viols; simDur=T; updatePanels();
+  curHits=r.hits; curViols=r.viols; curDrsLog=r.drsLog; simDur=T; updatePanels();
 }
 function insertTime(){   // 回傳可插入的時間點（吸附到 0.1s），太接近步尾則回傳 null
   const el=(performance.now()-simStart)/1000, T=Math.max(0.1,Math.round(Math.ceil((el+0.03)*10-1e-9))/10);
@@ -704,22 +761,26 @@ function toggleGear(p){ if(phase!=='decide'||p.ready||p.isAI||gameOver) return; 
 function setReady(p){
   if(phase!=='decide'||p.ready||gameOver) return;
   p.ready=true; p.cmd={thr:p.stick.y, str:p.stick.x, rev:p.rev};
-  updatePanels(); players.forEach(renderStick);
-  if(players.every(q=>q.ready)) startSim();
+  p.readyAt=performance.now(); updatePanels(); players.forEach(renderStick);
+  if(players.every(q=>q.ready)) aiReactThenStart();
 }
 function startSim(){
-  const r=simulateJoint(players.map(p=>p.cmd)); players.forEach((p,k)=>{ p.sim=r.res[k]; }); curHits=r.hits; curViols=r.viols;
+  if(phase!=='decide') return;
+  const r=simulateJoint(players.map(p=>p.cmd)); players.forEach((p,k)=>{ p.sim=r.res[k]; }); curHits=r.hits; curViols=r.viols; curDrsLog=r.drsLog;
   simStart=performance.now(); simDur=STEP_T; phase='sim'; updatePanels();
 }
 function finishSim(){
+  const pre=players.map(p=>({lat:signedLat(p.car),pr:progOf(p.car),idx:p.car.idx}));
   players.forEach(p=>{
     p.car=p.sim.car; p.car.idx=globalNearest(p.car).idx;
     if(p.sim.frames.length>1){
       p.sim.frames.forEach((f,i)=>{ if(i>0&&i%2===0) p.trail.push({x:f.x,y:f.y}); });
       const l=p.sim.frames[p.sim.frames.length-1]; p.trail.push({x:l.x,y:l.y}); p.marks.push({x:l.x,y:l.y});
+      const tm=players.length>4?400:2500; if(p.trail.length>tm) p.trail.splice(0,p.trail.length-tm); if(p.marks.length>tm/4) p.marks.splice(0,p.marks.length-tm/4);
     }
     if(p.sim.ev&&p.sim.ev.type==='finish') p.finT=simClock+p.sim.ev.t;
   });
+  stewardCheck(pre); if(curDrsLog) track.drsLog=curDrsLog;
   history.push({frames:players.map(p=>p.sim.frames), hits:curHits.map(h=>({...h,t:h.t+simClock})), viols:curViols.map(v=>({...v,t:v.t+simClock}))});
   curHits.forEach(h=>hitMarks.push({x:h.x,y:h.y}));
   simClock+=simDur; phase='idle';
@@ -730,6 +791,23 @@ function finishSim(){
       if(fin[1]&&Math.abs(adj(fin[1])-adj(f))<1e-9) return endGame(null,'draw');
       return endGame(f,'finish'); } }
   beginStep();
+}
+// 防守規則：後方 16 m 內、橫向重疊的追擊車存在時 ①只准做一次防守移動（不可再往回切） ②不可在煞車時橫移防守（彎道內走正常路線不算）
+function stewardCheck(pre){
+  const T=simDur;
+  players.forEach((p,k)=>{ if(p.car.fin) return;
+    const me=pre[k]; let pur=false, pd=0, bg=1e9;
+    players.forEach((o,j)=>{ if(j===k||o.car.fin) return; const g=me.pr-pre[j].pr; if(g>0.5&&g<16&&Math.abs(pre[j].lat-me.lat)<2.5&&g<bg){ pur=true; bg=g; pd=pre[j].lat-me.lat; } });
+    if(!pur){ p.defDir=0; return; }
+    const dl=signedLat(p.car)-me.lat, corner=track.curvature[Math.min(me.idx,track.curvature.length-1)]<300;
+    if(Math.abs(dl)<1.4||corner) return;
+    if(dl*pd<=0) return;   // 只有「朝追擊車所在方向橫移（擋路）」才算防守移動；往外讓或走自己的線不算
+    const dir=Math.sign(dl), th=p.cmd?(p.cmd.seq?p.cmd.seq.reduce((a,q)=>a+q.thr,0)/p.cmd.seq.length:p.cmd.thr):0; let why=null;
+    if(th<-0.4) why='煞車區防守變線';
+    else if(!p.defDir) p.defDir=dir;
+    else if(dir!==p.defDir) why='二次防守（變換方向）';
+    if(why&&(p.ruleT===undefined||simClock-p.ruleT>=3)){ p.ruleT=simClock; p.car.pen=(p.car.pen||0)+5; curViols.push({t:T,k,n:0,pen:5,x:p.car.x,y:p.car.y,col:true,why}); }
+  });
 }
 function pname(p){ return p.id===0?'玩家1':(mode==='ai'?(nAI>1?'AI '+p.id:'AI'):'玩家2'); }
 function ranking(){
@@ -749,6 +827,8 @@ function endGame(winner,reason){
 }
 
 // ---------- 預覽 / 搖桿 / UI ----------
+const pvPending=new Set(); let pvRaf=0;
+function schedPreview(p){ pvPending.add(p); if(pvRaf) return; pvRaf=requestAnimationFrame(()=>{ pvRaf=0; const L=[...pvPending]; pvPending.clear(); L.forEach(q=>{ if(phase==='decide'&&!q.ready) updatePreview(q); renderStick(q); }); }); }
 function updatePreview(p){
   if(p.isAI) return;
   p.preview=simulate(p.car,{thr:p.stick.y,str:p.stick.x,rev:p.rev},DT,SUB,false);
@@ -765,7 +845,7 @@ function renderStick(p){
     `${STEP_T}s 後預計 ${Math.round(f[f.length-1].v*3.6)} km/h${p.preview.ev?' 🏁':''}${p.preview.car.nOut>=4?' ⚠四輪出界':''}${p.preview.car.slip>0.5?' ⚠滑':''}${p.preview.car.nOut>0?' ⚠'+p.preview.car.nOut+'輪越線':''}`; }
 }
 function updatePanels(){
-  players.forEach(p=>{ const e=document.getElementById('tl'+p.id); if(e) e.textContent='界限 '+Math.min(p.car.viol||0,3)+'/3'+(p.car.pen?'｜罰時 +'+p.car.pen+'s':'')+'｜輪胎 '+Math.round(100-20*Math.min(1,p.car.tw||0))+'%'+((p.car.dr||0)>0.05?'｜尾流':'')+(Math.abs(p.car.vy||0)>1&&p.car.v>8?'｜側滑 '+Math.round(Math.abs(Math.atan2(p.car.vy,p.car.v))*57.3)+'°':'')+(p.car.fin?'｜🏁':''); });
+  players.forEach(p=>{ const e=document.getElementById('tl'+p.id); if(e) e.textContent='界限 '+Math.min(p.car.viol||0,3)+'/3'+(p.car.pen?'｜罰時 +'+p.car.pen+'s':'')+'｜輪胎 '+Math.round(100-20*Math.min(1,p.car.tw||0))+'%'+((p.car.dr||0)>0.05?'｜尾流':'')+(Math.abs(p.car.vy||0)>1&&p.car.v>8?'｜側滑 '+Math.round(Math.abs(Math.atan2(p.car.vy,p.car.v))*57.3)+'°':'')+(p.car.drsArm>=0?'｜DRS 待命':'')+(p.car.fin?'｜🏁':''); });
   players.forEach(p=>{
     if(!p.isAI){ const g=document.getElementById('gear'+p.id); g.disabled=p.ready||phase!=='decide'; g.textContent=p.rev?'R 倒車':'D 前進'; g.classList.toggle('rev',!!p.rev);
       const b=document.getElementById('ok'+p.id); b.disabled=p.ready||phase!=='decide'; b.textContent=p.ready?'已確認 ✓':'確認 OK'; renderStick(p); }
@@ -781,7 +861,7 @@ function makeStick(id){
   const el=document.getElementById('stick'+id); let act=false;
   const upd=e=>{ const p=players[id]; const r=el.getBoundingClientRect(), R=r.width/2*0.8;
     p.stick.x=clampNum((e.clientX-r.left-r.width/2)/R,-1,1); p.stick.y=clampNum(-(e.clientY-r.top-r.height/2)/R,-1,1);
-    if(Math.abs(p.stick.x)<0.04) p.stick.x=0; updatePreview(p); renderStick(p); };
+    if(Math.abs(p.stick.x)<0.04) p.stick.x=0; schedPreview(p); };
   el.addEventListener('pointerdown',e=>{ const p=players[id]; if(!p||p.ready||phase!=='decide') return; act=true; el.setPointerCapture(e.pointerId); upd(e); e.preventDefault(); });
   el.addEventListener('pointermove',e=>{ if(act) upd(e); });
   ['pointerup','pointercancel'].forEach(n=>el.addEventListener(n,()=>{act=false;}));
@@ -798,7 +878,7 @@ window.addEventListener('keydown',e=>{
   const p=players[who]; if(p.ready) return;
   if(ok) return setReady(p);
   p.stick.x=clampNum(p.stick.x+dx,-1,1); p.stick.y=clampNum(p.stick.y+dy,-1,1);
-  updatePreview(p); renderStick(p);
+  schedPreview(p);
 });
 
 // ---------- AI ----------
@@ -807,29 +887,58 @@ window.addEventListener('keydown',e=>{
 // 速度上限剖面：由曲率算各點彎道極速，再由後往前以煞車能力回推（含提前煞車距離）
 function ensureProfile(){
   if(track.vlim) return;
-  const n=track.center.length, arc=track.arcLen, vc=[];
-  for(let i=0;i<n;i++){ const R=track.curvature[i], k=isFinite(R)?1/R:0, q=k-9.8*CAR.DF; vc.push(q<=1e-6?200:Math.sqrt(9.8*CAR.MU0/q)); }
-  const vl=vc.map((v,i)=>{ let m=v; for(let j=Math.max(0,i-3);j<=Math.min(n-1,i+10);j++) m=Math.min(m,vc[j]); return m*0.86; });
+  const n=track.center.length, arc=track.arcLen, cen=track.center, HWm=track.halfWidths;
+  // ① 最小曲率賽車線：在賽道內（離白線留 2.6 m）調整每個點的橫向偏移，使整條路徑曲率平方和最小
+  //    （先用「拉直」初始化，再用雙調和 Gauss-Seidel 鬆弛）→ 自動得到外-內-外、晚彎心、早給油的最快線
+  const nx=[], ny=[], lim=[];
+  for(let i=0;i<n;i++){ const a=cen[Math.max(0,i-1)], b=cen[Math.min(n-1,i+1)]; let tx=b.x-a.x, ty=b.y-a.y; const l=Math.hypot(tx,ty)||1; nx.push(-ty/l); ny.push(tx/l); lim.push(Math.max(0,HWm[i]-2.6)); }
+  const e=new Float64Array(n), X=new Float64Array(n), Y=new Float64Array(n);
+  const setP=i=>{ X[i]=cen[i].x+nx[i]*e[i]; Y[i]=cen[i].y+ny[i]*e[i]; };
+  for(let i=0;i<n;i++) setP(i);
+  const pin=i=>(i<3||i>=n-3);
+  for(let it=0;it<250;it++) for(let i=1;i<n-1;i++){ if(pin(i)) continue;
+    const tx=(X[i-1]+X[i+1])/2-cen[i].x, ty=(Y[i-1]+Y[i+1])/2-cen[i].y; e[i]=clampNum(tx*nx[i]+ty*ny[i],-lim[i],lim[i]); setP(i); }
+  const dX=j=>X[j-1]-2*X[j]+X[j+1], dY=j=>Y[j-1]-2*Y[j]+Y[j+1];
+  for(let it=0;it<2600;it++) for(let i=2;i<n-2;i++){ if(pin(i)) continue;
+    const gx=dX(i-1)-2*dX(i)+dX(i+1), gy=dY(i-1)-2*dY(i)+dY(i+1);
+    const ne=clampNum(e[i]-1.6*(gx*nx[i]+gy*ny[i])/6,-lim[i],lim[i]); if(ne!==e[i]){ e[i]=ne; setP(i); } }
+  track.rl=Array.from(e);
+  // ② 沿賽車線（不是中線）的曲率 → 每點彎道極速；再由後往前以煞車能力回推煞車點
+  const rR=[], rS=[], vc=[];
+  for(let i=0;i<n;i++){ const i0=Math.max(0,i-4), i2=Math.min(n-1,i+4), a=Math.hypot(X[i]-X[i2],Y[i]-Y[i2]), b=Math.hypot(X[i0]-X[i2],Y[i0]-Y[i2]), c=Math.hypot(X[i0]-X[i],Y[i0]-Y[i]);
+    const k=(a<1e-6||b<1e-6||c<1e-6)?0:2*((X[i]-X[i0])*(Y[i2]-Y[i0])-(X[i2]-X[i0])*(Y[i]-Y[i0]))/(a*b*c);
+    rR.push(Math.abs(k)<1e-6?Infinity:1/Math.abs(k)); rS.push(Math.sign(k)); const q=Math.abs(k)-9.8*CAR.DF; vc.push(q<=1e-6?200:Math.sqrt(9.8*CAR.MU0/q)); }
+  track.rR=rR; track.rS=rS;
+  const vl=vc.map((v,i)=>{ let m=v; for(let j=Math.max(0,i-3);j<=Math.min(n-1,i+10);j++) m=Math.min(m,vc[j]); return m*LINE_SAFE; });
   vl[n-1]=200;
-  // 回推煞車點：煞車能力隨速度變化（低速抓地力小、不可能煞到 3 g），並留 20% 給轉向
   const ab=v=>0.8*Math.min(CAR.BMAX,9.8*(CAR.MU0+CAR.DF*v*v))+0.5*CAR.DRAG*v*v+1.5;
   for(let i=n-2;i>=0;i--) vl[i]=Math.min(vl[i],Math.sqrt(vl[i+1]*vl[i+1]+2*ab(vl[i+1])*(arc[i+1]-arc[i])));
   track.vlim=vl;
-  // 賽車線：出彎前外側、彎心內側（窄／寬兩個高斯平滑曲率之差），AI 以此為偏移目標
-  const cen=track.center, kap=cen.map((p,i)=>{ const p0=cen[Math.max(0,i-4)], p2=cen[Math.min(n-1,i+4)], a=dist(p,p2), b=dist(p0,p2), cc=dist(p0,p);
-    return (a<1e-6||b<1e-6||cc<1e-6)?0:2*((p.x-p0.x)*(p2.y-p0.y)-(p2.x-p0.x)*(p.y-p0.y))/(a*b*cc); });
-  const gs=(arr,sg)=>{ const r=Math.ceil(sg*2.5), w=[]; let sum=0; for(let j=-r;j<=r;j++){ const x=Math.exp(-j*j/(2*sg*sg)); w.push(x); sum+=x; }
-    return arr.map((_,i)=>{ let a=0; for(let j=-r;j<=r;j++) a+=arr[Math.min(n-1,Math.max(0,i+j))]*w[j+r]; return a/sum; }); };
-  const k1=gs(kap,4), k2=gs(kap,14);
-  track.rl=k1.map((v,i)=>{ const m=Math.min(track.halfWidths[i]*0.6,track.halfWidths[i]-3.5); return clampNum(450*v-350*k2[i],-m,m); });
+  // 車群用的保守速度剖面（以中線曲率估算、係數 0.86）：並排的車各守各的線、不在賽車線上，不能用賽車線的高彎速，否則內外線車速差太大會互撞
+  const vcC=[]; for(let i=0;i<n;i++){ const R=track.curvature[i], k=isFinite(R)?1/R:0, q=k-9.8*CAR.DF; vcC.push(q<=1e-6?200:Math.sqrt(9.8*CAR.MU0/q)); }
+  const vp=vcC.map((v,i)=>{ let m=v; for(let j=Math.max(0,i-3);j<=Math.min(n-1,i+10);j++) m=Math.min(m,vcC[j]); return m*0.86; });
+  vp[n-1]=200;
+  for(let i=n-2;i>=0;i--) vp[i]=Math.min(vp[i],Math.sqrt(vp[i+1]*vp[i+1]+2*ab(vp[i+1])*(arc[i+1]-arc[i])));
+  track.vlimP=vp;
 }
+const LINE_SAFE=0.96;   // 賽車線彎速安全係數（舊版以中線曲率估算用 0.86）
 // 預測對手未來軌跡（每 0.1s 一點）：A＝維持目前搖桿指令的物理推演；B＝沿賽道中線、保持側向偏移的「幽靈」
 let oppPred=null, defCtx=null;
 // 多車（≥6 台）模式：fieldMode＝啟用「車群守線」；packLat/packW＝本車守住的橫向位置與權重（旁邊有車時不再各自搶賽車線而互相交叉）
 let fieldMode=false, packLat=null, packW=0;
 function cmdFor(o,i){ return (o.ready&&o.cmd)?cmdAt(o.cmd,i):{thr:o.stick.y,str:o.stick.x,rev:o.rev}; }
+// 人類玩家確認的那一步之後的「合理走法」：維持目前橫向位置（純追蹤）、依保守彎速剖面控速（不會直衝出彎道，也不會憑空全力煞車）
+function ghostCmd(q){
+  const v=Math.max(Math.hypot(q.v,q.vy||0),3), n=track.center.length, nc=nearestCenter(q,q.idx||0); q.idx=nc.idx;
+  const lat=q.gl, Ld=clampNum(5+0.5*v,10,50), t=trackAt(track.arcLen[q.idx]+Ld), i2=Math.min(n-1,q.idx+Math.round(Ld/4)), lim=track.halfWidths[i2]-2.0;
+  const off=clampNum(lat,-lim,lim), px=t.x-t.ty*off, py=t.y+t.tx*off, rx=q.x-Math.cos(q.h)*CAR.L/2, ry=q.y-Math.sin(q.h)*CAR.L/2, dx=px-rx, dy=py-ry, dd=Math.hypot(dx,dy)||1;
+  let a=Math.atan2(dy,dx)-q.h; a=Math.atan2(Math.sin(a),Math.cos(a));
+  const delta=Math.atan(CAR.L*2*Math.sin(a)/dd), dmax=Math.atan(0.95*gripOf(q)*CAR.L/(v*v)), sgn=steerGain(v), smax=Math.min(1,dmax/sgn);
+  const vt=Math.min(track.vlimP[q.idx],track.vlimP[Math.min(n-1,q.idx+Math.round(v*0.5/4))])*0.97;
+  return {thr:clampNum((vt-q.v)*0.5,-0.6,1),str:clampNum(delta/sgn,-smax,smax)};
+}
 function buildOppPred(me,N){   // 只預測附近（≤100 m）最近的對手；N＝要預測的 0.1s 格數
-  const arc=track.arcLen, mi=me.car.idx;
+  const arc=track.arcLen, mi=me.car.idx, smart=!!DIFF[aiDifficulty].smart;
   const near=players.filter(o=>o!==me&&!o.car.fin&&Math.abs(arc[o.car.idx]-arc[mi])<90&&dist(o.car,me.car)<100)
     .sort((a,b)=>dist(a.car,me.car)-dist(b.car,me.car)).slice(0,nAI>3?8:3);
   return near.map(o=>{
@@ -841,8 +950,11 @@ function buildOppPred(me,N){   // 只預測附近（≤100 m）最近的對手�
     if(o.ready&&o.cmd){ const K=o.cmd.seq?o.cmd.seq.length:10;
       for(;i<=Math.min(N,K);) go(cmdAt(o.cmd,i-1));
       if(o.cmd.plan){ known=o.cmd.plan.length; for(;i<=Math.min(N,known);) go(o.cmd.plan[i-1]); } }
+    else if(!o.isAI&&!o.ready){ const K=Math.max(1,Math.round(STEP_T/AI_FINE)); known=K; for(;i<=Math.min(N,K);) go(cmdFor(o,i-1)); }   // 人類：假設這一步維持目前搖桿
     else if(o.prev&&o.prev.plan){ const off=Math.round((simClock-o.prev.t)/AI_FINE), pl=o.prev.plan;
       if(off>=0&&off<pl.length-3){ known=pl.length-off; for(;i<=Math.min(N,known);) go(pl[off+i-1]); } }
+    if(smart&&!o.isAI&&i<=N){   // 人類：這一步之後假設維持橫向位置、依彎速控速（比「直線等速」準得多，才知道該不該閃）
+      q.gl=signedLat(c); known=Math.max(known,Math.min(N,18)); for(;i<=Math.min(N,known);) go(ghostCmd(q)); }
     const L=A[A.length-1], ch=Math.cos(L.h), sh=Math.sin(L.h), i0=i-1;
     for(;i<=N;i++){ const T=(i-i0)*0.1; A.push({x:L.x+(ch*L.v-sh*(L.vy||0))*T, y:L.y+(sh*L.v+ch*(L.vy||0))*T, h:L.h, v:L.v, vy:L.vy||0}); }
     A.o=o; A.known=known; return A; });
@@ -856,11 +968,12 @@ function gapCost(r,T){
   if(!oppPred||!oppPred.length) return 0;
   const fr=r.frames, me=fr[fr.length-1], ch=Math.cos(me.h), sh=Math.sin(me.h); let w=0;
   for(const Pp of oppPred){
-    if(T>Math.min(2.2,Math.max(1.6,Pp.known*0.1))) continue;
+    if(T>Math.min(atkCtx?3:2.2,Math.max(1.6,Pp.known*0.1))) continue;
     const op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y, f=dx*ch+dy*sh, l=Math.abs(-dx*sh+dy*ch);
-    if(f<0||f>45||l>2.6) continue;
-    const need=8-(f+op.v*op.v/50-me.v*me.v/50);
-    if(need>0) w+=Math.min(60,need*3);
+    const dd=DIFF[aiDifficulty], lim=dd.smart?Math.min(45,16+Math.max(0,me.v-op.v)*1.8):45;   // smart：只有「逼近速度夠快」時才在遠處擔心
+    if(f<0||f>lim||l>2.6) continue;
+    const bf=frontDecel(Pp,T,25,dd), need=(dd.tail+1.5)-(f+op.v*op.v/(2*bf)-me.v*me.v/50);
+    if(need>0) w+=Math.min(60,need*3)*(dd.smart?1-0.6*f/lim:1);
   }
   return Math.min(w,120)*DIFF[aiDifficulty].safe;
 }
@@ -869,37 +982,56 @@ let atkCtx=null, laneLock=null;
 // 起跑直路終點：第一個曲率半徑 < 450 m 的位置再往前 90 m（煞車點）；在此之前 22 車守住各自車道
 function laneEnd(){ if(track.laneEnd!==undefined) return track.laneEnd; const c=track.curvature, a=track.arcLen; let e=a[a.length-1]*0.25;
   for(let i=0;i<c.length;i++) if(c[i]<450){ e=Math.max(150,a[i]-90); break; } return (track.laneEnd=e); }
+// 超車流程：①尾流跟車（拉近到約 14–55 m，依速差而定）②進入出彎距離才選邊並鎖定目標 ③並排／超越期間維持同一側，
+// 直到車頭領先對方 9 m 以上才收回（不會剛並排就切回，造成切入罰時）④兩側都不可行時繼續跟車、不硬擠
 function setAttack(p,d){
-  atkCtx=null; if(!d.atk||defCtx){ p.atkSide=0; return; }
-  const arc=track.arcLen, me=p.car, ml=signedLat(me); let tg=null;
-  for(const o of players){ if(o===p||o.car.fin) continue; const gap=arc[o.car.idx]-arc[me.idx];
-    if(gap>4&&gap<45&&Math.abs(signedLat(o.car)-ml)<3.6&&me.v>o.car.v-4&&(!tg||gap<tg.gap)) tg={o,gap}; }
+  atkCtx=null; if(!d.atk||defCtx){ p.atkSide=0; p.atkTgt=null; return; }
+  const arc=track.arcLen, me=p.car, ml=signedLat(me), pm=progOf(me), sm=!!d.smart; let tg=null;
+  // smart：用預測軌跡（人類＝目前搖桿＋合理續駛）取得對手 T 秒後的橫向位置與車速，而不是只看「現在」
+  const predOf=(o,T)=>{ const Pp=sm&&oppPred&&oppPred.find(x=>x.o===o); if(!Pp) return null; const op=oppAt(Pp,T); return {v:op.v, lat:signedLat({x:op.x,y:op.y,idx:nearestCenter(op,o.car.idx).idx})}; };
+  const vOf=(o,T)=>{ const q=predOf(o,T); return q?q.v:o.car.v; }, latOf=(o,T)=>{ const q=predOf(o,T); return q?q.lat:signedLat(o.car); };
+  const dv=o=>Math.max(0,me.v-vOf(o,1.0)), pull=o=>clampNum(26+dv(o)*3.2,30,110);
+  if(p.atkTgt){   // 已鎖定的超車目標：尚未完全超越就繼續
+    const o=p.atkTgt, g=progOf(o.car)-pm;
+    if(!o.car.fin&&g>-9&&g<pull(o)*1.6+20&&me.v>vOf(o,1.0)-8) tg={o,gap:g,locked:true}; else p.atkTgt=null;
+  }
+  if(!tg){
+    for(const o of players){ if(o===p||o.car.fin) continue; const gap=progOf(o.car)-pm; if(gap<=4||gap>=150) continue;
+      const dl=Math.min(Math.abs(signedLat(o.car)-ml), sm?Math.abs(latOf(o,1.0)-ml):1e9);   // 現在或 1 秒後會擋在我前面
+      if(dl<3.6&&me.v>vOf(o,1.0)-4&&(!tg||gap<tg.gap)) tg={o,gap}; }
+    if(tg&&(tg.gap>pull(tg.o)||(me.v<vOf(tg.o,1.0)-1&&tg.gap>24))){ p.atkSide=0; return; }   // 還太遠、或沒有速度優勢：先吃尾流跟車
+  }
   if(!tg){ p.atkSide=0; return; }
-  const lim=track.halfWidths[me.idx]-2.4, lo=signedLat(tg.o.car);
-  let s=p.atkSide;
-  if(!s){ s=Math.abs(ml-lo)>1?Math.sign(ml-lo):(turnSide(me.idx)||(lo>0?-1:1)); if(Math.abs(lo+s*3.4)>lim) s=-s; p.atkSide=s; }
-  const tgt=clampNum(lo+s*3.4,-lim,lim);
-  // 目標側向走廊必須沒有其他車（前 45 m～後 12 m、側向 3 m 內），否則留在原線跟車，不擠進別人身旁
-  for(const o of players){ if(o===p||o===tg.o||o.car.fin) continue; const g2=arc[o.car.idx]-arc[me.idx];
-    if(g2>-12&&g2<45&&Math.abs(signedLat(o.car)-tgt)<3){ p.atkSide=0; return; } }
-  atkCtx={tgt, w:0.9*d.atk};
+  const SEP=3.2, lim=track.halfWidths[me.idx]-2.4;
+  const Tm=sm?clampNum(tg.gap/Math.max(3,me.v-vOf(tg.o,1.0)),0.3,1.5):0, lo=sm?latOf(tg.o,Tm):signedLat(tg.o.car), drift=sm?lo-signedLat(tg.o.car):0;   // 並排時對手大概在哪個橫向位置
+  const room=s=>Math.min(SEP,s>0?lim-lo:lim+lo);
+  const clear=s=>{ const tgt=clampNum(lo+s*SEP,-lim,lim);
+    for(const o of players){ if(o===p||o===tg.o||o.car.fin) continue; const g2=progOf(o.car)-pm;
+      if(g2>-12&&g2<45&&Math.abs(latOf(o,0.8)-tgt)<3) return false; }
+    return true; };
+  const opts=[1,-1].filter(s=>room(s)>=2.6&&clear(s));
+  if(tg.locked&&p.atkSide&&!opts.includes(p.atkSide)&&room(p.atkSide)>=1.5) opts.push(p.atkSide);   // 已並排就不換邊
+  if(!opts.length){ p.atkSide=0; if(!tg.locked) p.atkTgt=null; return; }
+  let s=opts.includes(p.atkSide)?p.atkSide:0;
+  if(!s){ const ts=turnSide(me.idx); let bs=Infinity; for(const x of opts){ const sc=Math.abs(lo+x*SEP-ml)-(ts===x?2.5:0)-(Math.abs(drift)>0.8&&x===-Math.sign(drift)?1.5:0); if(sc<bs){ bs=sc; s=x; } } }   // 對手往哪邊移，就從另一邊超
+  p.atkSide=s; p.atkTgt=tg.o; atkCtx={tgt:clampNum(lo+s*SEP,-lim,lim), w:0.9*d.atk, gap:tg.gap};
 }
 // 避撞：真的會車身重疊＝重罰；另加很窄的軟性間隔（已決策對手 0.5 m、未決策 0.9 m），只看 1.2 秒內，
 // 所以不會因為「靠近」就大幅閃避，但並排時會留出身位，不再互相擠壓側撞
 let avoidBoost=1;   // 修正階段把避撞權重調高
 function collisionCost(r,t0,dt,dur){
   if(!oppPred||!oppPred.length) return 0;
-  const fr=r.frames; let tot=0;
+  const fr=r.frames, sm=DIFF[aiDifficulty].smart; let tot=0;
   for(const Pp of oppPred){
     const kn=(Pp.o.ready&&Pp.o.cmd), M=fieldMode?(kn?0.8:1.2):(kn?0.5:0.9); let hit=0, prox=0;
     for(let i=1;i<fr.length&&hit<90;i++){
-      const T=t0+i*dt; if(T>Math.min(1.5,Math.max(1.0,Pp.known*0.1))) break;
+      const T=t0+i*dt; if(T>(atkCtx?Math.min(2.8,Math.max(1.8,Pp.known*0.1)):Math.min(1.5,Math.max(1.0,Pp.known*0.1)))) break;
       const me=fr[i], op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y; if(dx*dx+dy*dy>100) continue;
       const A=carBox(me), B=carBox(op);
       if(obbHit(A,B)){ hit=Math.max(hit,(dx*Math.cos(me.h)+dy*Math.sin(me.h)>2)?90:40); break; }
-      A.hl+=M; A.hw+=M; const q=obbHit(A,B); if(q) prox=Math.max(prox,q.d);
+      const Mi=sm&&!Pp.o.isAI?Math.min(2,M+0.45*Math.max(0,T-(kn?1.0:STEP_T))):M; A.hl+=Mi; A.hw+=Mi; const q=obbHit(A,B); if(q) prox=Math.max(prox,q.d*(sm?1-0.4*Math.min(1,T/1.5):1));
     }
-    tot+=hit+prox*(fieldMode?22:16);
+    tot+=hit+prox*(fieldMode?22:16)*(sm?0.6:1);   // smart：只有「真的會撞」才重罰；擦邊的軟性餘裕權重降低、越遠的時間點越輕
   }
   return tot*DIFF[aiDifficulty].avoid*Math.min(avoidBoost,1.5);
 }
@@ -930,14 +1062,14 @@ function draftGain(r,T){
   for(const Pp of oppPred){ const op=oppAt(Pp,T), dx=op.x-me.x, dy=op.y-me.y,
     f=dx*Math.cos(me.h)+dy*Math.sin(me.h), l=Math.abs(-dx*Math.sin(me.h)+dy*Math.cos(me.h));
     if(f>3&&f<35&&l<2.2) g=Math.max(g,(1-f/35)*(1-l/2.2)); }
-  return g*8;
+  return g*8*DIFF[aiDifficulty].draft;
 }
 // 單步罰分：出界輪數、賽道界限違規／罰時、偏離中線（只在近邊緣時重罰）、車頭偏差、超出速度剖面、真實會撞
 function aiCost(r,t0,dur,dt){
   const c=r.car, cen=track.center, i0=Math.max(0,c.idx-1), i1=Math.min(cen.length-1,c.idx+1), T=t0+dur;
   const tang=Math.atan2(cen[i1].y-cen[i0].y, cen[i1].x-cen[i0].x);
   const ang=Math.abs(((c.h-tang+Math.PI*3)%(Math.PI*2))-Math.PI);
-  const edge=Math.max(0,c.lat-(track.halfWidths[c.idx]-2.5)), ov=Math.max(0,c.v-track.vlim[c.idx]*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8));
+  const edge=Math.max(0,c.lat-(track.halfWidths[c.idx]-2.5)), ov=Math.max(0,c.v-(packLat!==null?track.vlimP:track.vlim)[c.idx]*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8));
   const dc=defCtx?defCtx.w*Math.max(0,Math.abs(signedLat(c)-defCtx.side*defCtx.tgt)-1):0;
   let lt=atkCtx?atkCtx.tgt:track.rl[c.idx], lw=atkCtx?atkCtx.w:(oppPred&&oppPred.length>=2?0.18:0.4);
   if(laneLock!==null&&!atkCtx){ lt=laneLock; lw=0.5; }
@@ -946,6 +1078,200 @@ function aiCost(r,t0,dur,dt){
   const st=dc + c.nOut*160 + Math.abs(signedLat(c)-lt)*lw + edge*edge*14 + ang*4 + Math.abs(c.vy||0)*0.8 + ov*ov*6 + gapCost(r,T)*0.4 - draftGain(r,T);
   return st*dur + r.nv*600 + r.np*700 + collisionCost(r,t0,dt,dur);
 }
+// =====================================================================
+// 路徑搜尋（Pathfinding）：AI 不再只盯著賽車線（中線 / 最小曲率線），而是自己「找路」
+//  1. 在前方一段距離（依車速而定）設一條「目標線」（垂直賽道、橫跨整條賽道；超過終點就改用終點線）。
+//     目標線是線不是點：只要在賽道內任何位置（包含賽道邊緣）穿過它就算到達。
+//  2. 從目前狀態出發，每 0.1 s 嘗試「油門／煞車 × 轉向」的組合（真實物理逐步推演），
+//     用 beam search 往前展開，直到穿過目標線為止。
+//  3. 評分＝到達時間 + 罰分（出界、打滑、車速超過安全剖面、碰撞風險…）+ 到達時的終端懲罰
+//     （抵達速度不能超過目標線處的安全彎速、車頭要順著賽道、略偏好賽車線以利下一段）
+//  → 於是 AI 會自己找出「晚煞車、切彎、用滿賽道寬度、早給油」這類比賽車線更快的走法。
+// =====================================================================
+let dbgPF=false;                 // 除錯模式：顯示 AI 的路徑搜尋
+let PF_ON=true;
+DIFF.easy.pfW=5;   DIFF.easy.pfT=2.4;   DIFF.easy.pfMs=120;     // pfW＝beam 寬度；pfT＝目標線大約在幾秒後；pfMs＝單次搜尋時間預算
+DIFF.medium.pfW=10; DIFF.medium.pfT=3.2; DIFF.medium.pfMs=350;
+DIFF.hard.pfW=28;  DIFF.hard.pfT=5.0;   DIFF.hard.pfMs=750;
+// vk＝允許的彎道速度係數（越大越敢衝，實際是否打滑由物理模擬驗證）；lineW＝偏離預設賽車線的罰分（越小越敢自己找更快的線）；rich＝前 0.1s 區段多試幾種微調
+DIFF.easy.vk=1.03;   DIFF.easy.lineW=0.3;   DIFF.easy.rich=0;
+DIFF.medium.vk=1.03; DIFF.medium.lineW=0.3; DIFF.medium.rich=0;
+DIFF.hard.vk=1.08;   DIFF.hard.lineW=0.12;  DIFF.hard.rich=1;
+// smart＝預測人類玩家之後的走法（維持橫向位置＋依彎道控速）、預測側向位置選超車邊、越遠越大的不確定餘裕；react＝人類按下確認後，附近的 AI 依確切指令再規劃一次
+DIFF.easy.smart=0; DIFF.medium.smart=0; DIFF.hard.smart=1; DIFF.easy.react=0; DIFF.medium.react=0; DIFF.hard.react=1;
+const PT_S=50;                   // 罰分換算：50 點 ≈ 1 秒
+const PF_OFF=[0,2.5,-2.5,6,-6], PF_OFF_C=[0,3,-3];
+let PF_LINE_W=0.3, PF_ANG_W=3, PF_VK=1.03;   // 偏離賽車線的輕微罰分（每秒每公尺）、車頭偏離賽道方向的罰分（可調）
+let pfLastRec=null;
+function idxAtS(s){ const a=track.arcLen; let lo=0,hi=a.length-1; s=clampNum(s,0,a[hi]); while(hi-lo>1){ const m=(lo+hi)>>1; if(a[m]<=s) lo=m; else hi=m; } return lo; }
+function progOf(c){   // 車在賽道上的弧長位置（投影到中線切線，比 idx 精細）
+  const cen=track.center, n=cen.length, i=c.idx, a=cen[Math.max(0,i-1)], b=cen[Math.min(n-1,i+1)];
+  let tx=b.x-a.x, ty=b.y-a.y; const l=Math.hypot(tx,ty)||1; return track.arcLen[i]+((c.x-cen[i].x)*tx+(c.y-cen[i].y)*ty)/l; }
+function segHit(a,b,g0,g1){   // 線段 a→b 與目標線 g0–g1 相交時回傳 a→b 上的比例 u（0..1），否則 -1
+  const rx=b.x-a.x, ry=b.y-a.y, sx=g1.x-g0.x, sy=g1.y-g0.y, den=rx*sy-ry*sx; if(Math.abs(den)<1e-9) return -1;
+  const qx=g0.x-a.x, qy=g0.y-a.y, u=(qx*sy-qy*sx)/den, w=(qx*ry-qy*rx)/den; return (u>=0&&u<=1&&w>=0&&w<=1)?u:-1; }
+// 特殊情境（防守／進攻／起跑車道／車群守線）的橫向目標；一般情況回傳 null＝完全自由找路
+function pfCtx(c){
+  if(defCtx) return {lt:defCtx.side*defCtx.tgt, lw:defCtx.w, dead:1, win:2.6};
+  if(atkCtx) return {lt:atkCtx.tgt, lw:atkCtx.w, dead:0, win:2.4};
+  if(laneLock!==null) return {lt:laneLock, lw:0.5, dead:0, win:1.8};
+  if(packLat!==null){ const r=track.rl[c.idx]; return {lt:r+(packLat-r)*packW, lw:0.4+0.35*packW, dead:0, win:3.2}; }
+  return null;
+}
+// 穩定油門：與舊 AI 相同的摩擦橢圓限制（轉向用掉抓地力後，剩下才能給油／煞車）
+function pfStable(c,str,thr){
+  const g=gripOf(c), lat=Math.max(Math.abs(latA(str,Math.max(c.v,1))),Math.abs(c.v*(c.yr||0))), fl=Math.sqrt(Math.max(0,1-Math.pow(Math.min(1,lat/(0.95*g)),2)));
+  return thr<0?Math.max(thr,-0.8*fl*g/CAR.BMAX):Math.min(thr,0.6*fl*fl*g/Math.max(1,Math.min(CAR.AMAX,CAR.PWR/Math.max(c.v,5))));
+}
+const pfAb=v=>0.8*Math.min(CAR.BMAX,9.8*(CAR.MU0+CAR.DF*v*v))+0.5*CAR.DRAG*v*v+1.5;   // 與速度剖面相同的煞車能力估計
+// 剩餘時間估計（cost-to-go）：沿速度剖面，從目前車速「能加速就加速、超速就盡力煞車」積分到目標線。
+// 這讓 beam search 一開始就知道「這個速度到目標線還來不來得及煞車」，不會只貪快而在最後才發現衝出去（horizon effect）
+function pfToGo(k,pr,gi,VL,VK){
+  const arc=track.arcLen; let v=Math.max(k.v,0.5), t=0, s=pr;
+  for(let i=k.idx+1;i<=gi;i++){ const ds=Math.max(0.5,arc[i]-s); s=arc[i]; const cap=VL[i]*VK; let vn;
+    if(v<cap){ const a=Math.min(CAR.AMAX,CAR.PWR/Math.max(v,5)); vn=Math.min(cap,Math.sqrt(v*v+2*a*ds)); } else vn=Math.sqrt(Math.max(1,v*v-2*pfAb(v)*ds));
+    t+=ds*2/(v+vn); v=vn; }
+  return {t,v};
+}
+// 每個節點要試的動作：轉向＝純追蹤（含多個橫向偏移，找不同走線）＋維持／微調目前方向盤；油門＝速度剖面建議值＋全油／半油／滑行／輕煞／全煞
+function pfActions(c,t0,d,crowd,vE,oppOn,coarse){
+  const v=c.v, strs=[], thrs=[];
+  const addS=x=>{ x=clampNum(x,-1,1); for(const y of strs) if(Math.abs(y-x)<0.025) return; strs.push(x); };
+  const addT=x=>{ x=clampNum(x,-1,1); for(const y of thrs) if(Math.abs(y-x)<0.1) return; thrs.push(x); };
+  for(const o of ((crowd||coarse)?PF_OFF_C:PF_OFF)) addS(pursuitStr(c,o));
+  if(d.rich&&!coarse&&!crowd){ addS(pursuitStr(c,1.2)); addS(pursuitStr(c,-1.2)); }
+  addS(c.ss); if(!crowd&&!coarse){ addS(c.ss+0.08); addS(c.ss-0.08); }
+  if(v<12){ addS(1); addS(-1); }
+  const tp=profThr(c,1,t0); addT(tp);
+  const over=v>vE*1.02, under=v<vE*0.8&&!oppOn;   // 明顯超速就不考慮給油；遠低於速限且沒有對手就不考慮煞車（省計算）
+  if(!over){ addT(1); if(!crowd&&!coarse) addT(0.4); if(d.rich&&!coarse&&!crowd) addT(0.7); }
+  addT(0); if(!under){ addT(-1); if(!crowd&&!coarse) addT(-0.4); }
+  const out=[]; for(const str of strs) for(const raw of thrs){ const th=raw>0?raw*d.cap:raw; out.push({str,raw,thr:th}); }
+  return out;
+}
+async function pfSearch(p,d,c0,K,crowd,tok){
+  const n=track.center.length, cen=track.center, arc=track.arcLen, total=arc[n-1], VL=packLat!==null?track.vlimP:track.vlim;
+  const v0=Math.hypot(c0.v,c0.vy||0), W0=crowd?Math.min(d.pfW,4):d.pfW;
+  let tG=crowd?Math.min(d.pfT,2.4):d.pfT; if(atkCtx) tG=Math.max(tG,crowd?3.2:4.6);   // 超車時往更遠規劃：整個並排→超越→回線的過程要在目標線內完成
+  let tAcc=0, tSeg=performance.now(); const budget=crowd?(atkCtx?60:40):d.pfMs*(atkCtx?1.5:1), s0=progOf(c0), cpu=()=>tAcc+performance.now()-tSeg;
+  const yl=async()=>{ tAcc+=performance.now()-tSeg; await sleep0(); tSeg=performance.now(); return tok!==undefined&&tok!==aiTok; };   // 讓出主執行緒（不計入時間預算）；token 已過期＝作廢
+  // ① 目標線：前方 D 公尺（車速越快越遠），超過終點就用終點線。是「線」不是點：整條賽道寬（含邊緣）穿過都算到達
+  const D=clampNum(Math.max(v0*tG+25, v0*K*AI_FINE*1.3+35, 60),60,330);
+  let sT=s0+D, G, fin=false, gi;
+  if(sT>=total-3){ fin=true; G=track.finishGate; gi=n-1; sT=total; }
+  else { gi=idxAtS(sT); const t=trackAt(sT), hw=track.halfWidths[gi]; let lo=-hw, hi=hw;
+    const cx=pfCtx({idx:gi}); if(cx){ lo=Math.max(lo,cx.lt-cx.win); hi=Math.min(hi,cx.lt+cx.win); if(hi<lo+1){ const m=clampNum((lo+hi)/2,-hw+0.5,hw-0.5); lo=m-0.5; hi=m+0.5; } }
+    G=[{x:t.x-t.ty*lo,y:t.y+t.tx*lo},{x:t.x-t.ty*hi,y:t.y+t.tx*hi}]; }
+  const VK=d.vk||PF_VK, LW=d.lineW===undefined?PF_LINE_W:d.lineW;
+  const vG=fin?110:Math.min(110,VL[gi]*VK), termOver=o=>fin?0:o*14+o*o*3;
+  const rec=dbgPF?{gate:G,fin,D,tree:[],arr:[],segs:[],W:W0,K,ms:0,nodes:0,fail:false}:null;
+  const oppOn=!!(oppPred&&oppPred.length);
+  // 多解析度時間格：本步實際執行的部分（K 格）用 0.1 s；之後 1 s（車群 0.6 s）用 0.2 s；更遠用 0.4 s。越遠越粗＝省運算，把算力留給近處與更寬的 beam
+  const tFine=K*AI_FINE, tMid=tFine+(crowd?0.6:1.0), hs=[];
+  { let t=0; const tEnd=Math.max(tG*2.3,tFine+1.5); while(t<tEnd-1e-9&&hs.length<90){ const h=t<tFine-1e-6?AI_FINE:(t<tMid-1e-6?0.2:0.4); hs.push(h); t+=h; } }
+  const nMax=hs.length; let Lest=0; { let t=0; while(Lest<nMax&&t<tG*1.15){ t+=hs[Lest++]; } } Lest=Math.max(1,Lest);
+  let bestJ=Infinity, best=null, nodes=0;
+  const angAbs=a=>Math.abs(((a+Math.PI*3)%(Math.PI*2))-Math.PI);
+  const vEof=k=>VL[k.idx]*Math.pow(1-0.2*Math.min(1,k.tw||0),0.8)*(packLat!==null?radiusFacP(k,k.idx):radiusFac(k,k.idx))*VK;
+  // 展開一個動作（真實物理推 0.1 s）：到達目標線 → 登記候選解並回傳 1；否則回傳新節點（或 null＝死路）
+  const expand=(nd,ac,s,src)=>{
+    const c=nd.c, a0={x:c.x,y:c.y}, t0=nd.t, h=hs[s];
+    const r=simulate(c,{thr:ac.thr,str:ac.str},DT,Math.round(h/DT),true), k=r.car; nodes++;
+    const i=k.idx, hw=track.halfWidths[i], i0=Math.max(0,i-1), i1=Math.min(n-1,i+1), tang=Math.atan2(cen[i1].y-cen[i0].y,cen[i1].x-cen[i0].x);
+    const ang=angAbs(k.h-tang), sl=signedLat(k), edge=Math.max(0,k.lat-(hw-1.0)), ov=Math.max(0,k.v-vEof(k));
+    const cx=pfCtx(k), cp=cx?cx.lw*Math.max(0,Math.abs(sl-cx.lt)-cx.dead):Math.abs(sl-track.rl[i])*LW;
+    let st=k.nOut*160+edge*edge*14+ang*PF_ANG_W+Math.abs(k.vy||0)*0.8+ov*ov*5+(k.slip||0)*6+cp;   // 狀態罰分（每秒）
+    const nv=(k.viol||0)-(c.viol||0), np=(k.pen||0)-(c.pen||0); let ev=0;
+    if(oppOn){ r.nv=nv; r.np=np; ev=collisionCost(r,t0,DT,h); const T=t0+h; st+=gapCost(r,T)*0.4-draftGain(r,T); }
+    const cost=nd.g+st*h+nv*600+np*700+ev;
+    const hit=segHit(a0,k,G[0],G[1]);
+    if(hit>=0){   // 穿過目標線＝到達
+      const tp=fin?0:termOver(Math.max(0,k.v-vG*0.99))+ang*40+(cx?cp:Math.abs(sl-track.rl[i])*LW*4);   // 終端懲罰：抵達速度、車頭、位置
+      const tA=t0+hit*h, J=cost+tp+tA*PT_S;
+      if(rec) rec.arr.push({x:k.x,y:k.y,J});
+      if(J<bestJ){ bestJ=J; best={nd:{c:k,par:nd,thr:ac.raw,str:ac.str,h,fr:rec?r.frames:null},J,t:tA,v:k.v,src}; }
+      return 1;
+    }
+    const pr=progOf(k); if(pr>sT+25) return null;   // 衝過目標線但不在範圍內（出界）
+    const tg=pfToGo(k,pr,gi,VL,VK), f=cost+(tg.t*PT_S)+termOver(Math.max(0,tg.v-vG*0.99));
+    if(cost+(t0+h+tg.t*0.9)*PT_S>=bestJ) return null;   // 下界已不可能贏過目前最佳解
+    return {c:k,par:nd,thr:ac.raw,str:ac.str,g:cost,prog:pr,sl,ang,h,t:t0+h,fr:rec?r.frames:null,f};
+  };
+  const root={c:c0,par:null,thr:0,str:0,g:0,prog:s0,t:0};
+  // ② 先跑幾條「賽車線＋速度剖面」的基準路徑（與舊 AI 同策略）→ 取得一個保底解，也提供 beam 剪枝的上界
+  for(const off of (crowd?[0]:[0,3,-3])){
+    let nd=root;
+    for(let s=0;s<nMax&&nd&&nd!==1;s++){ const c=nd.c, str=pursuitStr(c,off), raw=pfStable(c,str,profThr(c,1,nd.t)); nd=expand(nd,{str,raw,thr:raw>0?raw*d.cap:raw},s,'base'); if(nd===1) break; }
+  }
+  // ③ beam search：每層＝ 0.1 s，每個節點試「油門×轉向」的組合
+  let layer=[root], Wc=W0;
+  for(let s=0;s<nMax&&layer.length;s++){
+    const kids=[];
+    const frac=cpu()/budget, pg=Math.min(1,s/Lest);   // 時間預算控制：落後進度就縮小 beam，有餘裕再放大
+    if(frac>pg*1.15+0.05) Wc=Math.max(3,Wc-1); else if(frac<pg*0.8&&Wc<W0) Wc++;
+    for(const nd of layer){
+      if(performance.now()-tSeg>8&&await yl()) return ABORT;
+      const c=nd.c, vE=vEof(c);
+      for(const ac of pfActions(c,nd.t,d,crowd,vE,oppOn,nd.t>=tFine-1e-6)){ const kd=expand(nd,ac,s,'beam'); if(kd&&kd!==1) kids.push(kd); }
+    }
+    kids.sort((a,b)=>a.f-b.f);
+    const seen=new Set(), nxt=[];   // 相近狀態只留最好的（依進度／橫向／車速／車頭分格），保持 beam 多樣性
+    for(const nd of kids){ const key=Math.round(nd.prog/3)+'|'+Math.round(nd.sl/1.0)+'|'+Math.round(nd.c.v/2)+'|'+Math.round(nd.ang/0.07);
+      if(seen.has(key)) continue; seen.add(key); nxt.push(nd); if(nxt.length>=Wc) break; }
+    if(rec) for(const nd of nxt) if(rec.tree.length<6000) rec.tree.push([nd.par.c.x,nd.par.c.y,nd.c.x,nd.c.y,nd.thr]);
+    layer=nxt;
+  }
+  if(rec){ rec.ms=cpu(); rec.nodes=nodes; }
+  if(!best){ if(rec){ rec.fail=true; pfLastRec=rec; } return null; }   // 找不到路 → 交給舊的賽車線策略
+  // ④ 取最佳路徑
+  const chain=[]; for(let q=best.nd;q&&q.par;q=q.par) chain.push(q); chain.reverse();
+  const seq=[]; for(const q of chain){ const m=Math.max(1,Math.round(q.h/AI_FINE)); for(let z=0;z<m;z++) seq.push({thr:q.thr,str:q.str}); }   // 粗格展開回 0.1 s 單位（plan 供其他車預測用）
+  while(seq.length<K) seq.push({thr:seq[seq.length-1].thr,str:seq[seq.length-1].str});
+  if(rec){ rec.segs=chain.map(q=>({pts:q.fr,thr:q.thr})); rec.tArr=best.t; rec.vArr=best.v; rec.J=best.J; rec.steps=chain.length; rec.src=best.src; pfLastRec=rec; }
+  return {seq:seq.slice(0,K), plan:seq, dbg:rec};
+}
+// ---------- 除錯繪圖 ----------
+function drawPF(p,db){
+  const P=(x,y)=>toPx(x,y);
+  ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+  // beam 展開過的路徑（綠＝加速、黃＝滑行、紅＝煞車）
+  const cls=[['rgba(80,230,120,.30)',[]],['rgba(255,225,90,.28)',[]],['rgba(255,90,90,.32)',[]]];
+  for(const s of db.tree) cls[s[4]>0.2?0:(s[4]<-0.2?2:1)][1].push(s);
+  ctx.lineWidth=1;
+  for(const [col,arr] of cls){ if(!arr.length) continue; ctx.strokeStyle=col; ctx.beginPath(); for(const s of arr){ const a=P(s[0],s[1]), b=P(s[2],s[3]); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); } ctx.stroke(); }
+  // 目標線
+  const g0=P(db.gate[0].x,db.gate[0].y), g1=P(db.gate[1].x,db.gate[1].y);
+  ctx.strokeStyle=db.fin?'#ff5d5d':'#ff3df2'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(g0.x,g0.y); ctx.lineTo(g1.x,g1.y); ctx.stroke();
+  ctx.fillStyle=ctx.strokeStyle; for(const q of [g0,g1]){ ctx.beginPath(); ctx.arc(q.x,q.y,4,0,7); ctx.fill(); }
+  // 到達目標線的候選解（越亮越好）
+  if(db.arr.length){ const Js=db.arr.map(a=>a.J), mn=Math.min(...Js), mx=Math.max(mn+1,Math.min(Math.max(...Js),mn+300));
+    for(const a of db.arr){ const u=clampNum((a.J-mn)/(mx-mn),0,1), q=P(a.x,a.y); ctx.fillStyle=a.J===mn?'#ffffff':'hsl('+(190-u*190)+',90%,'+(60-u*15)+'%)'; ctx.globalAlpha=a.J===mn?1:0.75; ctx.beginPath(); ctx.arc(q.x,q.y,a.J===mn?4.5:2.5,0,7); ctx.fill(); } ctx.globalAlpha=1; }
+  // 最佳路徑：底線＝這一步實際會執行的部分（白色），顏色＝油門狀態
+  if(db.segs.length){
+    ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=7; ctx.beginPath();
+    db.segs.forEach((sg,i)=>{ if(i>=db.K) return; sg.pts.forEach((f,j)=>{ const q=P(f.x,f.y); (i===0&&j===0)?ctx.moveTo(q.x,q.y):ctx.lineTo(q.x,q.y); }); }); ctx.stroke();
+    ctx.lineWidth=3.5;
+    db.segs.forEach(sg=>{ ctx.strokeStyle=sg.thr>0.2?'#3df57a':(sg.thr<-0.2?'#ff4d4d':'#ffd93d'); ctx.beginPath(); sg.pts.forEach((f,j)=>{ const q=P(f.x,f.y); j?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); }); ctx.stroke(); });
+    ctx.fillStyle='#fff'; db.segs.forEach(sg=>{ const f=sg.pts[sg.pts.length-1], q=P(f.x,f.y); ctx.beginPath(); ctx.arc(q.x,q.y,2,0,7); ctx.fill(); });   // 每 0.1 s 一個點
+  }
+  ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.lineWidth=3; ctx.strokeStyle='#0c1119'; ctx.fillStyle=p.color;
+  const mid={x:(g0.x+g1.x)/2,y:(g0.y+g1.y)/2}, tx=(p.id===0?'YOU':'AI '+p.id)+' → '+(db.tArr!==undefined?db.tArr.toFixed(1)+'s '+Math.round(db.vArr*3.6)+'km/h':'找不到路');
+  ctx.strokeText(tx,mid.x,mid.y-10); ctx.fillText(tx,mid.x,mid.y-10);
+  ctx.restore();
+}
+function drawPFAll(){
+  if(!dbgPF||phase==='replay'||!track) return;
+  if(track.rl){   // 最小曲率賽車線（舊 AI 的唯一依據）當對照：灰色虛線
+    if(!track.rlPts) track.rlPts=track.center.map((c,i)=>{ const a=track.center[Math.max(0,i-1)], b=track.center[Math.min(track.center.length-1,i+1)]; let tx=b.x-a.x, ty=b.y-a.y; const l=Math.hypot(tx,ty)||1; return {x:c.x-ty/l*track.rl[i], y:c.y+tx/l*track.rl[i]}; });
+    pathLine(track.rlPts,'rgba(200,200,200,.35)',1.5,[3,5]); }
+  const ys=[]; players.forEach(p=>{ if(p.isAI&&p.cmd&&p.cmd.dbg){ drawPF(p,p.cmd.dbg); ys.push(p); } });
+  ctx.save(); ctx.font='12px sans-serif'; ctx.textAlign='left'; let y=cv.height-14-ys.length*16-22;
+  const L=(t,c)=>{ ctx.fillStyle=c; ctx.fillText(t,12,y); y+=16; };
+  L('🐞 AI 路徑搜尋除錯：洋紅線＝目標線　綠/黃/紅＝加速/滑行/煞車　白底＝本步執行　灰虛線＝賽車線','rgba(255,255,255,.9)');
+  ys.forEach(p=>{ const d=p.cmd.dbg; L((p.id===0?'YOU':'AI '+p.id)+'：目標線 '+Math.round(d.D)+' m｜展開 '+d.nodes+' 節點｜'+d.ms.toFixed(0)+' ms｜'+(d.tArr!==undefined?'預計 '+d.tArr.toFixed(2)+' s 到達，抵達 '+Math.round(d.vArr*3.6)+' km/h｜採用：'+(d.src==='base'?'賽車線基準':'搜尋出的新路徑'):'搜尋失敗→改用賽車線'),p.color); });
+  ctx.restore();
+}
+
 const THR_F=[-1,-.5,0,.4,.7,1], STR_F=[-1,-.5,-.25,-.1,-.04,0,.04,.1,.25,.5,1];
 const THR_S=[-1,-.4,0,.5,1], STR_S=[-1,-.4,-.12,-.03,0,.03,.12,.4,1], THR_C=[-1,0,.6,1];
 const DSTR=[-.08,-.025,.025,.08];
@@ -975,25 +1301,40 @@ const latA=(s,v)=>v*v/CAR.L*Math.tan(s*steerGain(v));
 // 跟車限速（限制「逼近速度」）：前車的位置、速度取自它公布的意圖（精確），我與它決策時刻相同、煞車能力相當，
 // 所以只要不比它快太多、且保留身位（車長＋0.1 s 車距），即使它下一步全力煞車我也停得下來：v ≤ √(v前²＋2a·間距)。
 // （舊版加了 0.25 s 反應距離，起跑格 8 m 的排距會一排比一排慢，後排幾乎停住）
+// 預測前車在 [T, T+1.2 s] 內的最大減速度（取自它公布的意圖／人類目前搖桿的物理推演）。
+// 沒有預測到急煞時，只假設它最多以 follow×我方煞車力 減速（不再用「前車隨時全力急煞」的最壞情況），所以能貼得更近
+function frontDecel(Pp,T,a,d){
+  const i0=Math.max(0,Math.floor(T*10)), i1=Math.min(Pp.length-1,i0+12); let md=0;
+  for(let i=i0;i<i1;i++) md=Math.max(md,(Pp[i].v-Pp[i+1].v)/AI_FINE);
+  return Math.min(a,Math.max(md*1.25+1,d.follow*a));
+}
 function followCap(c,T){
   if(!oppPred||!oppPred.length) return 1e9;
-  const ch=Math.cos(c.h), sh=Math.sin(c.h), a=Math.max(8,0.7*Math.min(CAR.BMAX,gripOf(c))); let cap=1e9;
-  for(const Pp of oppPred){ if(T>Math.min(2.2,Math.max(1.6,Pp.known*0.1))) continue;
+  const d=DIFF[aiDifficulty], ch=Math.cos(c.h), sh=Math.sin(c.h), a=Math.max(8,0.7*Math.min(CAR.BMAX,gripOf(c))); let cap=1e9;
+  for(const Pp of oppPred){ if(T>Math.min(atkCtx?3:2.2,Math.max(1.6,Pp.known*0.1))) continue;
     const op=oppAt(Pp,T), dx=op.x-c.x, dy=op.y-c.y, fw=dx*ch+dy*sh, lt=Math.abs(-dx*sh+dy*ch);
-    if(fw<3||fw>70||lt>(fieldMode?3.0:2.5)) continue;
-    const gap=Math.max(0,fw-6.5-0.1*c.v)+1.5; cap=Math.min(cap,Math.sqrt(2*a*gap+op.v*op.v)); }   // +1.5 m：前車指令已知，留一點寬裕讓後車能跟上它的加速
+    const cl=Math.max(0,c.v-op.v);
+    if(fw<3||fw>(d.smart?Math.min(70,24+cl*2.2):70)||lt>(fieldMode?3.0:2.5)) continue;
+    const bf=Math.max(4,frontDecel(Pp,T,a,d)), gap=Math.max(0,fw-(atkCtx?0.6:1)*(d.tail+d.tailV*c.v))+1.5+(d.smart?Math.max(0,fw-22)*0.5:0);   // smart：遠處的前車之後還有時間煞車，不必現在就減速
+    cap=Math.min(cap,Math.sqrt(2*a*gap+op.v*op.v*a/bf)); }   // 我方停車距離 v²/2a ≤ 間距 + 前車停車距離 v前²/2bf
   return cap;
 }
 // 同一個彎，內線的實際半徑較小、外線較大：以車身所在橫向位置修正彎道極速（只在多車模式啟用，避免外線車衝出、內線車過慢被追撞）
 function radiusFac(c,i){
+  const R=track.rR[i]; if(!isFinite(R)||R>600) return 1;
+  const sg=track.rS[i]; if(!sg) return 1;
+  const Re=clampNum(R-(signedLat(c)-track.rl[i])*sg,0.6*R,1.5*R);
+  return clampNum(Math.sqrt(Re/R),0.88,1.05);
+}
+function radiusFacP(c,i){   // 車群版：相對中線的半徑修正
   const R=track.curvature[i]; if(!isFinite(R)||R>600) return 1;
-  const s=turnSide(i); if(!s) return 1;
-  const Re=clampNum(R-signedLat(c)*s,0.6*R,1.5*R);
+  const sg=turnSide(i); if(!sg) return 1;
+  const Re=clampNum(R-signedLat(c)*sg,0.6*R,1.5*R);
   return clampNum(Math.sqrt(Re/R),0.9,1.05);
 }
 function profThr(c,f,T){
-  const n=track.vlim.length, i=Math.min(n-1,c.idx+Math.round(c.v*0.5/4)); let vt=Math.min(track.vlim[c.idx],track.vlim[i])*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8)*(1-0.4*(c.dr||0))*f*Math.sqrt(clampNum(c.gs===undefined?1:c.gs,0.3,1));
-  if(fieldMode) vt*=radiusFac(c,i);
+  const VL=packLat!==null?track.vlimP:track.vlim, n=VL.length, i=Math.min(n-1,c.idx+Math.round(c.v*0.5/4)); let vt=Math.min(VL[c.idx],VL[i])*Math.pow(1-0.2*Math.min(1,c.tw||0),0.8)*(1-0.4*(c.dr||0))*f*Math.sqrt(clampNum(c.gs===undefined?1:c.gs,0.3,1));
+  vt*=packLat!==null?radiusFacP(c,i):radiusFac(c,i);
   vt=Math.min(vt,followCap(c,T||0));
   return clampNum((vt-c.v)*0.6,-1,1);
 }
@@ -1004,16 +1345,22 @@ function sideCount(p){
     const dl=Math.abs(signedLat(o.car)-ml); if(dl>=1.2&&dl<6.5) n++; }
   return n;
 }
-function aiSearch(p,d){
+let aiLock=false;
+async function aiSearch(p,d,tok){   // 全域搜尋狀態（oppPred、atkCtx…）一次只允許一個搜尋，其餘排隊
+  while(aiLock){ await sleepMs(1); if(tok!==undefined&&tok!==aiTok) return null; }
+  aiLock=true; aiRunning++; try{ return await aiSearchInner(p,d,tok); } finally{ aiRunning--; aiLock=false; }
+}
+async function aiSearchInner(p,d,tok){
   ensureProfile(); const arc=track.arcLen, c0={...p.car}; c0.lat=0;
   const K=Math.max(1,Math.round(STEP_T/AI_FINE)), crowd=nAI>5, hz=Math.max(crowd?Math.min(d.horizon,3):d.horizon,K*AI_FINE+0.5), nS=Math.round(hz/AI_FINE);
-  oppPred=buildOppPred(p,nS+2);
+  oppPred=buildOppPred(p,Math.max(nS+2,34));
   laneLock=(gridMode&&p.lane!==undefined&&arc[p.car.idx]<laneEnd())?p.lane:null;
   fieldMode=players.length>=6; packLat=null; packW=0;
   const side=(fieldMode&&laneLock===null)?sideCount(p):0;
   if(laneLock!==null||side>=2){ defCtx=null; atkCtx=null; p.atkSide=0; p.defSide=0; } else { setDefense(p,d); setAttack(p,d); }
   if(side>=1&&!defCtx&&!atkCtx){ const lim=track.halfWidths[p.car.idx]-3.0; packLat=clampNum(signedLat(p.car),-lim,lim); packW=side>=2?1:0.5; }   // 車群守線：旁邊有車就維持目前橫向位置
   const near=oppPred.length>0, offs=near?(packLat!==null?[0,1.5,-1.5]:[0,2.5,-2.5,5,-5]):[0], facs=near?[1,0.8,0.6,0.3]:[1];
+  if(PF_ON){ const rp=await pfSearch(p,d,c0,K,crowd,tok); if(rp===ABORT) return null; if(rp) return rp; }   // 路徑搜尋；失敗才退回下面舊的「賽車線＋速度剖面」策略
   let best=null;
   for(const dof of offs) for(const f of facs){
     let c={...c0}, acc=0, fin=false; const seq=[];
@@ -1030,22 +1377,26 @@ function aiSearch(p,d){
     const sc=arc[c.idx]+Math.min(c.v,track.vlim[c.idx])*1.5-acc;
     if(!best||sc>best.sc) best={sc,seq};
   }
-  return {seq:best.seq.slice(0,K), plan:best.seq};
+  return {seq:best.seq.slice(0,K), plan:best.seq, dbg:dbgPF?pfLastRec:null};
 }
 function makeCmd(b,d,noisy){
   let nth=1, nst=1; if(noisy&&d.noise){ nth=1-Math.random()*d.noise*1.5; nst=1+(Math.random()*2-1)*d.noise*0.5; }   // 雜訊只會「少給」油門／煞車（動態模型下多給會直接超出抓地力、甩尾）
   const seq=b.seq.map(k=>{ let thr=k.thr*nth; if(thr>0) thr*=d.cap; return {thr,str:clampNum(k.str*nst,-1,1)}; });
-  return {thr:seq[0].thr,str:seq[0].str,seq,plan:b.plan,t:simClock};   // plan＝完整意圖（共享給其他車），t＝決策時間
+  return {thr:seq[0].thr,str:seq[0].str,seq,plan:b.plan,t:simClock,dbg:b.dbg};   // plan＝完整意圖（共享給其他車），t＝決策時間
 }
 function applyCmd(p,cmd){ const l=cmd.seq[cmd.seq.length-1]; p.lastStr=l.str; p.lastThr=l.thr; p.stick={x:l.str,y:l.thr}; p.cmd=cmd; }
 let decCounter=0;
-function aiDecide(p,defer){
-  if(phase!=='decide'||p.ready) return;
-  const d=DIFF[aiDifficulty];
-  const b=(gridMode&&step===1&&p.car.v<2)?{seq:[{thr:1,str:0}]}:aiSearch(p,d);
-  applyCmd(p,makeCmd(b,d,true)); p.ready=true; p.decIdx=++decCounter;
-  updatePanels();
-  if(!defer&&players.every(q=>q.ready)) startSim();
+async function aiDecide(p,tok,defer){
+  if(phase!=='decide'||p.ready||p.thinking) return;
+  p.thinking=true;
+  try{
+    const d=DIFF[aiDifficulty];
+    const b=(gridMode&&step===1&&p.car.v<2)?{seq:[{thr:1,str:0}]}:await aiSearch(p,d,tok);
+    if(!b||tok!==aiTok||phase!=='decide'||p.ready) return;
+    applyCmd(p,makeCmd(b,d,true)); p.ready=true; p.readyAt=performance.now(); p.decIdx=++decCounter;
+    updatePanels();
+    if(!defer&&players.every(q=>q.ready)) startSim();
+  } finally{ p.thinking=false; }
 }
 // ---- 修正階段：全部 AI 決策完後，用「真正的聯合物理」試跑一整步；若有車會相撞，就讓涉事的 AI 在知道所有人確切指令的情況下重新規劃 ----
 const REP_ROUNDS={easy:2,medium:5,hard:8};
@@ -1066,7 +1417,7 @@ function emergencyCmds(p){
           mk(i=>({thr:-0.6,str:i<3?0.25:0})), mk(i=>({thr:-0.6,str:i<3?-0.25:0})), mk(()=>({thr:-1,str:0}))];
 }
 function repairBegin(){ const d=aiDifficulty; return {best:trialJoint(), n:0, tried:new Map(), max:nAI>5?20:Math.max(1,REP_ROUNDS[d])}; }
-function repairStep(rp){   // 回傳 true＝還有下一輪
+async function repairStep(rp,tok){   // 回傳 true＝還有下一輪
   if(!rp.best.bad.size||rp.n>=rp.max) return false;
   const cands=[...rp.best.bad.keys()].map(i=>players[i]).filter(p=>p&&p.isAI&&!p.car.fin&&p.ready&&(rp.tried.get(p)||0)<3)
     .sort((a,b)=>(a.decIdx||0)-(b.decIdx||0));   // 先動較早決策者（當時看不到後面的車）
@@ -1077,7 +1428,8 @@ function repairStep(rp){   // 回傳 true＝還有下一輪
   const p=cands[0], d=DIFF[aiDifficulty]; rp.tried.set(p,(rp.tried.get(p)||0)+1); rp.n++;
   const old=p.cmd, oS=p.stick, oLS=p.lastStr, oLT=p.lastThr;
   const revert=()=>{ p.cmd=old; p.stick=oS; p.lastStr=oLS; p.lastThr=oLT; };
-  avoidBoost=1.5; let nc=null; try{ nc=makeCmd(aiSearch(p,d),d,false); }finally{ avoidBoost=1; }
+  avoidBoost=1.5; let nc=null; try{ const b=await aiSearch(p,d,tok); if(b) nc=makeCmd(b,d,false); }finally{ avoidBoost=1; }
+  if(!nc||tok!==aiTok||phase!=='decide') return false;
   applyCmd(p,nc); let t=trialJoint();
   if(t.sc<rp.best.sc) rp.best=t; else revert();
   if(rp.best.bad.has(p.id)){ for(const alt of emergencyCmds(p)){ const keep={cmd:p.cmd,stick:p.stick,ls:p.lastStr,lt:p.lastThr}; applyCmd(p,alt); const t2=trialJoint();
@@ -1089,25 +1441,46 @@ function repairStep(rp){   // 回傳 true＝還有下一輪
 function negotiateBegin(){ const arc=track.arcLen;
   const best=trialJoint();   // 只有「碰撞或近距離擦身」牽涉到的車才需要再談，其他車沿用原計畫（省計算）
   return {list:players.filter(p=>p.isAI&&!p.car.fin&&p.ready&&p.cmd&&(best.bad.has(p.id)||best.near.has(p.id))).sort((a,b)=>arc[b.car.idx]-arc[a.car.idx]), best, i:0}; }
-function negotiateStep(ng){   // 回傳 true＝還有下一台
+async function negotiateStep(ng,tok){   // 回傳 true＝還有下一台
   while(ng.i<ng.list.length){
     const p=ng.list[ng.i++];
     if(!players.some(o=>o!==p&&!o.car.fin&&dist(o.car,p.car)<45)) continue;   // 附近沒車就不用談
     const d=DIFF[aiDifficulty], old=p.cmd, oS=p.stick, oLS=p.lastStr, oLT=p.lastThr;
-    const nc=makeCmd(aiSearch(p,d),d,false); applyCmd(p,nc); const t=trialJoint();
+    const b=await aiSearch(p,d,tok); if(!b||tok!==aiTok||phase!=='decide') return false; const nc=makeCmd(b,d,false); applyCmd(p,nc); const t=trialJoint();
     if(t.sc<ng.best.sc) ng.best=t; else { p.cmd=old; p.stick=oS; p.lastStr=oLS; p.lastThr=oLT; }
     return true;
   }
   return false;
 }
-function aiNegotiate(done){
-  const tok=aiTok; if(players.filter(p=>p.isAI&&!p.car.fin).length<3){ done(); return; }
-  const ng=negotiateBegin();
-  (function go(){ if(tok!==aiTok||phase!=='decide'||gameOver) return; if(negotiateStep(ng)) setTimeout(go,0); else done(); })();
+// 反應階段（Hard）：人類確認指令後，在它「之前」就已決策、且在它附近（≤90 m）的 AI，依確切指令再規劃一次；
+// 因為已知對手這一步的實際動作，所以更敢超車、也更清楚哪些情況根本不必閃。只要安全分數不比原計畫差就採用新計畫
+async function aiReactThenStart(){
+  const d=DIFF[aiDifficulty], tok=aiTok;
+  if(d.react&&phase==='decide'&&!gameOver){
+    const hum=players.filter(q=>!q.isAI&&!q.car.fin&&q.ready), arc=track.arcLen;
+    const list=players.filter(q=>q.isAI&&!q.car.fin&&q.ready&&q.cmd&&hum.some(h=>h.readyAt>(q.readyAt||0)&&dist(h.car,q.car)<90)).sort((a,b)=>arc[b.car.idx]-arc[a.car.idx]);
+    if(list.length){
+      let best=trialJoint(); const d2={...d,pfMs:d.pfMs*0.5};
+      for(const p of list){
+        if(tok!==aiTok||phase!=='decide'||gameOver) return;
+        const old=p.cmd, oS=p.stick, oLS=p.lastStr, oLT=p.lastThr;
+        const b=await aiSearch(p,d2,tok); if(!b||tok!==aiTok||phase!=='decide') return;
+        applyCmd(p,makeCmd(b,d,false)); const t=trialJoint();
+        if(t.sc<=best.sc) best=t; else { p.cmd=old; p.stick=oS; p.lastStr=oLS; p.lastThr=oLT; }
+        await sleep0();
+      }
+    }
+  }
+  if(tok===aiTok&&phase==='decide') startSim();
 }
-function aiRepair(done){
-  const tok=aiTok, rp=repairBegin();
-  (function go(){ if(tok!==aiTok||phase!=='decide'||gameOver) return; if(repairStep(rp)) setTimeout(go,0); else done(); })();
+async function aiNegotiate(tok){
+  if(players.filter(p=>p.isAI&&!p.car.fin).length<3) return;
+  const ng=negotiateBegin();
+  while(tok===aiTok&&phase==='decide'&&!gameOver){ if(!(await negotiateStep(ng,tok))) break; await sleep0(); }
+}
+async function aiRepair(tok){
+  const rp=repairBegin();
+  while(tok===aiTok&&phase==='decide'&&!gameOver){ if(!(await repairStep(rp,tok))) break; await sleep0(); }
 }
 
 // ---------- 主迴圈 / 繪製 ----------
@@ -1120,7 +1493,7 @@ function loop(){
     bar.style.width=(rem/DECIDE_MS*100)+'%';
     bar.style.background = rem<2500?'#ff5964':'var(--accent)';
     document.getElementById('phaseBadge').textContent='決策中 '+(rem/1000).toFixed(1)+'s';
-    if(rem<=0){ players.forEach(p=>{ if(!p.isAI) setReady(p); else if(!p.ready) aiDecide(p); }); }
+    if(rem<=0){ players.forEach(p=>{ if(!p.isAI) setReady(p); }); }
   } else if(phase==='sim'){
     bar.style.width=((1-(now-simStart)/(simDur*1000))*100)+'%';
     const it=insertTime(), ib=document.getElementById('btnInsert'), sm=ib.querySelector('small');
@@ -1181,6 +1554,7 @@ function draw(){
   ctx.closePath(); ctx.fillStyle='rgba(60,90,70,0.55)'; ctx.fill();
   [track.left,track.right].forEach(cu=>pathLine(cu,'#e8c15a',2.5));
   drawGate(track.startGate,'#5ad1ff'); drawGate(track.finishGate,'#ff5d5d');
+  drawDRS();
   if(gridMode&&track.grid) drawGridSlots();
 
   players.forEach((p,i)=>{
@@ -1202,9 +1576,12 @@ function draw(){
   });
   // 碰撞痕跡（橘色 ✕）
   (inRp?replay.hits.filter(h=>h.t<=replay.t):hitMarks).forEach(h=>{ const q=toPx(h.x,h.y); ctx.strokeStyle='#ff9a3c'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(q.x-5,q.y-5); ctx.lineTo(q.x+5,q.y+5); ctx.moveTo(q.x+5,q.y-5); ctx.lineTo(q.x-5,q.y+5); ctx.stroke(); });
+  drawPFAll();
   players.forEach((p,i)=>drawCar(views[i],p.color,p.wheel));
   if(gridMode&&scale>=1.6) players.forEach((p,i)=>{ const q=toPx(views[i].x,views[i].y), t=p.id===0?'YOU':String(p.id);
     ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.lineWidth=3; ctx.strokeStyle='#0c1119'; ctx.strokeText(t,q.x,q.y-16); ctx.fillStyle=p.id===0?'#fff':p.color; ctx.fillText(t,q.x,q.y-16); });
+  players.forEach((p,i)=>{ const z=track.drs&&track.drs[p.car.drsArm]; if(!z) return; const ci=nearestCenter(views[i],p.car.idx).idx;
+    if(ci>=z.ia&&ci<=z.ib&&(phase!=='decide')){ const q=toPx(views[i].x,views[i].y); ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.lineWidth=3; ctx.strokeStyle='#0c1119'; ctx.strokeText('DRS',q.x,q.y+22); ctx.fillStyle='#3ddc84'; ctx.fillText('DRS',q.x,q.y+22); } });
   // 碰撞特效：衝擊環、火花、文字
   fxs.forEach(({h,age})=>{
     const q=toPx(h.x,h.y);
@@ -1218,7 +1595,7 @@ function draw(){
   });
   (inRp?replay.viols:curViols).forEach(v=>{ if(T<0) return; const age=T-v.t; if(age<0||age>=1.6) return; const q=toPx(v.x,v.y);
     ctx.save(); ctx.globalAlpha=1-age/1.6; ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.fillStyle=v.pen?'#ff5964':'#ffd45a';
-    ctx.fillText(v.col?'⚠ 碰撞責任 罰時 +'+v.pen+'s':(v.pen?'⚠ 超出賽道 罰時 +'+v.pen+'s':'⚠ 超出賽道 警告 '+v.n+'/3'),q.x,q.y-26-age*18); ctx.restore(); });
+    ctx.fillText(v.col?'⚠ '+(v.why||'碰撞責任')+' 罰時 +'+v.pen+'s':(v.pen?'⚠ 超出賽道 罰時 +'+v.pen+'s':'⚠ 超出賽道 警告 '+v.n+'/3'),q.x,q.y-26-age*18); ctx.restore(); });
   ctx.restore();
 }
 // 決策預覽：沿預測軌跡畫出 4 個半透明車影（25/50/75/100%），車頭方向＝車身朝向，黃色箭頭＝實際行進方向，
@@ -1232,6 +1609,16 @@ function drawGhosts(p){
     if(j>=2){ const q=toPx(f.x,f.y), sp=Math.hypot(f.v,f.vy||0), ang=f.h+Math.atan2(f.vy||0,f.v), L=Math.min(40,5+0.3*sp)*Math.max(scale,3);
       ctx.save(); ctx.globalAlpha=j===3?0.95:0.5; ctx.strokeStyle='#ffe14a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(q.x,q.y); ctx.lineTo(q.x+Math.cos(ang)*L,q.y+Math.sin(ang)*L); ctx.stroke(); ctx.restore(); }
   });
+}
+function drawDRS(){
+  const Z=track.drs; if(!Z||!Z.length) return;
+  ctx.save(); ctx.lineCap='butt'; ctx.lineJoin='round';
+  for(const z of Z){
+    ctx.globalAlpha=0.26; pathLine(track.center.slice(z.ia,z.ib+1),'#3ddc84',Math.max(2,track.halfWidths[z.ia]*2*scale),[]); ctx.globalAlpha=1;
+    pathLine([track.left[z.di],track.right[z.di]],'#9dffc4',2,[6,5]);   // 偵測線
+    if(scale>=1.0){ const m=track.center[z.ia+((z.ib-z.ia)>>1)], q=toPx(m.x,m.y); ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.fillStyle='#9dffc4'; ctx.fillText('DRS',q.x,q.y-6); }
+  }
+  ctx.restore();
 }
 function drawGridSlots(){
   ctx.save(); ctx.strokeStyle='rgba(255,255,255,.6)'; const lw=Math.max(1.4/scale,0.16);
@@ -1292,6 +1679,7 @@ wrap.addEventListener('wheel',e=>{ e.preventDefault(); const r=cv.getBoundingCli
 document.getElementById('btnZoomIn').onclick=()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,1.25);
 document.getElementById('btnZoomOut').onclick=()=>zoomAt(wrap.clientWidth/2,wrap.clientHeight/2,0.8);
 document.getElementById('btnReset').onclick=()=>{ follow=false; document.getElementById('btnFollow').classList.remove('on'); fitView(); };
+document.getElementById('btnDbg').onclick=function(){ dbgPF=!dbgPF; this.classList.toggle('on',dbgPF); };
 document.getElementById('btnFollow').onclick=function(){ follow=!follow; this.classList.toggle('on',follow); if(follow) scale=4.5; else fitView(); };
 
 // ---------- 畫面切換 ----------
@@ -1511,6 +1899,7 @@ $e('ioApply').onclick=()=>{ try{ const o=JSON.parse(ioText.value); if(!Array.isA
 try{ const o=JSON.parse(localStorage.getItem('f1_ctrack')||'null'); if(o&&Array.isArray(o.pts)&&o.pts.length>=2){ ed.pts=o.pts; ed.hw=o.hw||14; ed.grid=o.grid||2000; ed.res=validateTrack(sampleSpline(ed.pts),ed.hw,ed.grid); commitCustom(); } }catch(e){}
 
 makeStick(0); makeStick(1);
+window.F1DBG={get track(){return track;},get players(){return players;},get clock(){return simClock;},get history(){return history;}};
 })();
 </script>
 </body>
